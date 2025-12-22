@@ -506,11 +506,15 @@ class OvertimeScraper:
 
 def main():
     """CLI entry point for scraping overtime.ag odds."""
+    from datetime import date
+
     scraper = OvertimeScraper(headless=True)  # Headless for production/CI
     df = scraper.fetch_ncaab_odds()
 
     if not df.empty:
-        output_path = Path("data/overtime_odds.csv")
+        today = date.today().isoformat()
+        output_path = Path(f"data/overtime_ncaab_odds_{today}.csv")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(output_path, index=False)
         print(f"\nScraped {len(df)} games")
         print(f"Odds exported to: {output_path}")
