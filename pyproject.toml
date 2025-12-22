@@ -1,0 +1,36 @@
+[project]
+name = "kenpom-client"
+version = "0.2.0"
+description = "KenPom API client + MCP server for basketball analytics"
+requires-python = ">=3.12.11"
+dependencies = [
+  "httpx>=0.27.0",
+  "pydantic>=2.7.0",
+  "python-dotenv>=1.0.1",
+  "pandas>=2.2.2",
+  "pyarrow>=17.0.0",
+  "playwright>=1.57.0",
+  "mcp>=1.0.0",
+]
+
+[project.scripts]
+kenpom = "kenpom_client.cli:main"
+kenpom-mcp = "kenpom_client.mcp_server:main"
+fetch-odds = "kenpom_client.overtime_scraper:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv]
+package = true
+
+[dependency-groups]
+dev = [
+    "pyrefly>=0.46.0",
+    "pytest>=9.0.2",
+    "ruff>=0.14.10",
+]

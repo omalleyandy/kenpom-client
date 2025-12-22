@@ -1,0 +1,268 @@
+"""Matchup feature engineering for game predictions.
+
+This module provides matchup-specific features that compare team strengths/weaknesses,
+identify style mismatches, and enhance prediction accuracy beyond simple efficiency
+differentials.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+import pandas as pd
+
+
+@dataclass(frozen=True)
+class MatchupFeatures:
+    """Matchup-specific features derived from team comparisons.
+
+    This dataclass encapsulates all comparative metrics between two teams,
+    including efficiency deltas, style signals, and placeholder hooks for
+    future enhancements (rest, travel, etc.).
+
+    All delta fields are calculated as: away_team - home_team
+    (negative values indicate home team advantage)
+    """
+
+    # Efficiency deltas (away - home, so negative = home advantage)
+    delta_adj_em: float  # Overall efficiency differential
+    delta_adj_oe: float  # Offensive efficiency differential
+    delta_adj_de: float  # Defensive efficiency differential (lower is better)
+    delta_tempo: float  # Tempo differential
+
+    # Shooting matchup signals
+    shooting_advantage: float  # Away eFG% vs Home DeFG% mismatch
+    shooting_defense_advantage: float  # Home eFG% vs Away DeFG% mismatch
+
+    # Ball control signals
+    turnover_advantage: float  # Away TO% vs Home DTO% forcing
+    rebounding_advantage: float  # Away OR% vs Home DOR% prevention
+
+    # Style classification signals
+    tempo_mismatch: float  # Absolute tempo difference (matchup volatility)
+    pace_control: str  # "home_controls" | "away_controls" | "neutral"
+
+    # Shooting style signals
+    home_3pt_reliance: float  # % of points from 3PT (home)
+    away_3pt_reliance: float  # % of points from 3PT (away)
+    style_clash: str  # "3pt_vs_interior" | "similar" | "balanced"
+
+    # Placeholder hooks (future enhancement)
+    home_court_factor: float  # Currently constant 3.5, future: team-specific
+    rest_advantage: Optional[int]  # Days rest differential (future)
+    travel_distance: Optional[float]  # Miles traveled (future)
+
+    # Metadata
+    feature_version: str  # "1.0" for tracking feature evolution
+
+
+def _safe_get(row: pd.Series, key: str, default: float) -> float:
+    """Safely get value from pandas Series, handling None and missing keys.
+
+    Args:
+        row: Pandas Series (team data)
+        key: Column name to retrieve
+        default: Default value if missing or None
+
+    Returns:
+        Value from series or default
+    """
+    value = row.get(key)
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return default
+    return float(value)
+
+
+def calculate_matchup_features(away: pd.Series, home: pd.Series) -> MatchupFeatures:
+    """Calculate matchup-specific features from team data.
+
+    This function derives comparative metrics between two teams, including:
+    - Efficiency differentials (ΔAdjEM, ΔAdjO, ΔAdjD, ΔTempo)
+    - Shooting matchup advantages (offense vs defense eFG%)
+    - Ball control signals (turnovers, rebounding)
+    - Style classification (tempo control, 3PT reliance, style clash)
+
+    Args:
+        away: Team data for away team (pandas Series from enriched snapshot)
+        home: Team data for home team (pandas Series from enriched snapshot)
+
+    Returns:
+        MatchupFeatures dataclass with all comparative metrics
+
+    Example:
+        >>> df = load_enriched_snapshot("data/kenpom_ratings_2025_2025-12-21_enriched.csv")
+        >>> oregon = find_team(df, "Oregon")
+        >>> gonzaga = find_team(df, "Gonzaga")
+        >>> matchup = calculate_matchup_features(oregon, gonzaga)
+        >>> print(f"Tempo mismatch: {matchup.tempo_mismatch:.1f}")
+    """
+    # =========================================================================
+    # A. Efficiency Deltas
+    # =========================================================================
+    delta_adj_em = _safe_get(away, "adj_em", 0.0) - _safe_get(home, "adj_em", 0.0)
+    delta_adj_oe = _safe_get(away, "adj_oe", 105.0) - _safe_get(home, "adj_oe", 105.0)
+    delta_adj_de = _safe_get(away, "adj_de", 100.0) - _safe_get(home, "adj_de", 100.0)
+    delta_tempo = _safe_get(away, "adj_tempo", 68.0) - _safe_get(home, "adj_tempo", 68.0)
+
+    # =========================================================================
+    # B. Shooting Matchup
+    # =========================================================================
+    # Away offense vs Home defense
+    away_efg = _safe_get(away, "efg_pct", 50.0)
+    home_defg = _safe_get(home, "defg_pct", 50.0)
+    shooting_advantage = away_efg - home_defg
+
+    # Home offense vs Away defense
+    home_efg = _safe_get(home, "efg_pct", 50.0)
+    away_defg = _safe_get(away, "defg_pct", 50.0)
+    shooting_defense_advantage = home_efg - away_defg
+
+    # =========================================================================
+    # C. Ball Control Signals
+    # =========================================================================
+    # Turnover battle: Can away team protect vs home pressure?
+    home_dto = _safe_get(home, "dto_pct", 20.0)  # Home forces turnovers
+    away_to = _safe_get(away, "to_pct", 20.0)  # Away commits turnovers
+    turnover_advantage = home_dto - away_to
+    # Positive = home forces more TOs than away commits
+
+    # Rebounding battle: Can away team crash boards vs home defense?
+    away_or = _safe_get(away, "or_pct", 30.0)  # Away offensive rebounds
+    home_dor = _safe_get(home, "dor_pct", 30.0)  # Home allows offensive rebounds
+    rebounding_advantage = away_or - home_dor
+    # Positive = away team gets more offensive boards than home allows
+
+    # =========================================================================
+    # D. Tempo & Pace Control
+    # =========================================================================
+    tempo_mismatch = abs(delta_tempo)
+
+    # Determine pace control (who dictates tempo)
+    if tempo_mismatch > 5.0:
+        if delta_tempo > 0:
+            pace_control = "away_controls"  # Away plays faster
+        else:
+            pace_control = "home_controls"  # Home plays faster
+    else:
+        pace_control = "neutral"
+
+    # =========================================================================
+    # E. Style Classification
+    # =========================================================================
+    # 3PT reliance (from point distribution)
+    home_3pt_reliance = _safe_get(home, "off_fg3", 30.0)
+    away_3pt_reliance = _safe_get(away, "off_fg3", 30.0)
+
+    # Style clash detection
+    three_pt_diff = abs(home_3pt_reliance - away_3pt_reliance)
+    if three_pt_diff > 10.0:
+        # One team relies heavily on 3PT, other doesn't
+        style_clash = "3pt_vs_interior"
+    else:
+        style_clash = "similar"
+
+    # =========================================================================
+    # F. Placeholder Hooks (Future Enhancement)
+    # =========================================================================
+    home_court_factor = calculate_home_court_factor(home)
+    rest_advantage = None  # TODO: Implement with schedule data
+    travel_distance = None  # TODO: Implement with venue database
+
+    return MatchupFeatures(
+        # Efficiency deltas
+        delta_adj_em=delta_adj_em,
+        delta_adj_oe=delta_adj_oe,
+        delta_adj_de=delta_adj_de,
+        delta_tempo=delta_tempo,
+        # Shooting matchup
+        shooting_advantage=shooting_advantage,
+        shooting_defense_advantage=shooting_defense_advantage,
+        # Ball control
+        turnover_advantage=turnover_advantage,
+        rebounding_advantage=rebounding_advantage,
+        # Style signals
+        tempo_mismatch=tempo_mismatch,
+        pace_control=pace_control,
+        home_3pt_reliance=home_3pt_reliance,
+        away_3pt_reliance=away_3pt_reliance,
+        style_clash=style_clash,
+        # Placeholder hooks
+        home_court_factor=home_court_factor,
+        rest_advantage=rest_advantage,
+        travel_distance=travel_distance,
+        # Metadata
+        feature_version="1.0",
+    )
+
+
+def calculate_home_court_factor(home: pd.Series) -> float:
+    """Calculate team-specific home court advantage.
+
+    Placeholder: Returns constant 3.5 for now.
+
+    Future implementation should consider:
+    - Home/away win percentage splits
+    - Venue-specific factors (altitude, arena size, crowd capacity)
+    - Conference vs non-conference games
+    - Historical home court advantage trends
+
+    Args:
+        home: Team data for home team (pandas Series)
+
+    Returns:
+        Home court advantage in points (currently constant 3.5)
+    """
+    # TODO: Implement team-specific HCA using historical splits
+    return 3.5
+
+
+@dataclass
+class GameContext:
+    """Game context metadata (future enhancement).
+
+    This dataclass is a placeholder for future enhancements that require
+    game-specific context beyond team statistics, such as:
+    - Rest days since last game
+    - Travel distance from home venue
+    - Back-to-back game flags
+    - Injury reports
+    """
+
+    away_days_rest: Optional[int] = None
+    home_days_rest: Optional[int] = None
+    away_venue: Optional[str] = None
+    home_venue: Optional[str] = None
+
+    @property
+    def rest_advantage(self) -> Optional[int]:
+        """Calculate days rest differential (positive = home has more rest).
+
+        Returns:
+            Days rest difference or None if data unavailable
+        """
+        if self.away_days_rest is not None and self.home_days_rest is not None:
+            return self.home_days_rest - self.away_days_rest
+        return None
+
+
+def calculate_travel_distance(away_venue: str, home_venue: str) -> Optional[float]:
+    """Calculate travel distance in miles.
+
+    Placeholder: Returns None for now.
+
+    Future implementation should:
+    - Use geocoding API to convert venue names to coordinates
+    - Calculate great circle distance (haversine formula)
+    - Account for conference vs non-conference travel patterns
+    - Consider neutral site games
+
+    Args:
+        away_venue: Away team's home venue name
+        home_venue: Host venue name
+
+    Returns:
+        Travel distance in miles or None
+    """
+    # TODO: Implement with venue database and geocoding
+    return None

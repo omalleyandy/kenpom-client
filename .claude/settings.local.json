@@ -1,0 +1,51 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"C:/Users/omall/Documents/python_projects/kenpom-client/.venv/Scripts/python.exe\" -m pytest C:/Users/omall/Documents/python_projects/kenpom-client/tests/test_effort.py -v)",
+      "Bash(\"C:/Users/omall/Documents/python_projects/kenpom-client/.venv/Scripts/python.exe\" -c:*)",
+      "Bash(pyrefly check:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(\".venv/Scripts/python.exe\" -m pyrefly check)",
+      "Bash(\".venv/Scripts/pyrefly.exe\" check)",
+      "Bash(\".venv/Scripts/ruff.exe\" check .)",
+      "Bash(\".venv/Scripts/pytest.exe\" -v)",
+      "Bash(\".venv/Scripts/python.exe\":*)",
+      "mcp__kenpom__kenpom_ratings",
+      "Bash(.venv/Scripts/pyrefly.exe check:*)",
+      "Bash(.venv/Scripts/pytest.exe tests/test_snapshot_enrichment.py -v)",
+      "Bash(.venv/Scripts/pytest.exe -v)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/ruff.exe format .)",
+      "Bash(.venv/Scripts/ruff.exe check .)",
+      "Bash(.venv/Scripts/ruff.exe check . --fix)",
+      "Bash(.venv/Scripts/ruff.exe check . --fix --unsafe-fixes)",
+      "Bash(if [ -f \"data/kenpom_ratings_2025_2025-12-21_enriched.csv\" ])",
+      "Bash(then echo \"Snapshot exists\")",
+      "Bash(else echo \"Snapshot not found\")",
+      "Bash(fi)",
+      "Bash(.venv/Scripts/playwright.exe install:*)",
+      "Bash(.venv/Scripts/ruff.exe format:*)",
+      "Bash(.venv/Scripts/ruff.exe check src/kenpom_client/overtime_scraper.py --fix)",
+      "Bash(.venv/Scripts/uv.exe run:*)",
+      "Bash(.venv/Scripts/fetch-odds.exe:*)",
+      "Bash(powershell -Command \"Get-ScheduledTask -TaskName ''FetchOvertimeCollegeBasketballOdds'' | Select-Object -Property State,LastRunTime,LastTaskResult | Format-List\")",
+      "Bash(powershell -Command \"\\(Get-ScheduledTask -TaskName ''FetchOvertimeCollegeBasketballOdds''\\).State\")",
+      "Bash(where.exe:*)",
+      "Bash(powershell -Command \"Stop-ScheduledTask -TaskName ''FetchOvertimeCollegeBasketballOdds''\")",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 3\")",
+      "Bash(powershell -Command \"Start-ScheduledTask -TaskName ''FetchOvertimeCollegeBasketballOdds''\")",
+      "Bash(powershell -Command \"Get-Content logs\\\\odds_fetch.log | Select-Object -Last 30\")",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 3; Start-ScheduledTask -TaskName ''FetchOvertimeCollegeBasketballOdds''; Start-Sleep -Seconds 20\")",
+      "Bash(powershell -Command:*)",
+      "Bash(powershell -File:*)",
+      "Bash(schtasks:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "kenpom"
+  ]
+}

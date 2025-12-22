@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "kenpom": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "C:/Users/omall/Documents/python_projects/kenpom-client",
+        "run",
+        "kenpom-mcp"
+      ]
+    }
+  }
+}
