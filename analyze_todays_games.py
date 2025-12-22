@@ -587,6 +587,29 @@ def main():
                 f"  {i}. {game['away_team']} @ {game['home_team']} (sigma={game['avg_sigma']:.2f})"
             )
 
+    # Debug: Show unmatched teams and suggest corrections
+    failed_analyses = [a for a in analyses if "error" in a]
+    if failed_analyses:
+        print(f"\n\n{'=' * 80}")
+        print("UNMATCHED TEAMS - Add to TEAM_ALIASES in analyze_todays_games.py")
+        print(f"{'=' * 80}")
+        for a in failed_analyses:
+            error_msg = a.get("error", "")
+            # Extract team name from error message
+            if "Team not found:" in error_msg:
+                missing_team = error_msg.replace("Team not found:", "").strip()
+                # Search for similar names in KenPom
+                similar = df[df["team"].str.contains(missing_team[:4], case=False, na=False)]["team"].tolist()
+                if not similar:
+                    # Try first word
+                    first_word = missing_team.split()[0] if missing_team else ""
+                    similar = df[df["team"].str.contains(first_word, case=False, na=False)]["team"].tolist()
+                print(f"\n  '{missing_team}':")
+                if similar:
+                    print(f"    Possible matches: {similar[:5]}")
+                else:
+                    print("    No similar teams found")
+
     # Export to CSV
     results_df = pd.DataFrame(valid_analyses)
     output_path = Path(f"data/todays_game_predictions_{date_str}.csv")
