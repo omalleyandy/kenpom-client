@@ -506,7 +506,7 @@ class OvertimeScraper:
 
 def main():
     """CLI entry point for scraping overtime.ag odds."""
-    scraper = OvertimeScraper(headless=False)  # Headed for debugging
+    scraper = OvertimeScraper(headless=True)  # Headless for production/CI
     df = scraper.fetch_ncaab_odds()
 
     if not df.empty:
