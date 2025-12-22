@@ -310,9 +310,9 @@ def format_game_analysis(analysis: dict) -> str:
         lines.append("\nMarket Odds:")
         lines.append(f"  Spread: {analysis['market_spread']:>+5.1f} ({analysis.get('spread_odds', 'N/A')})")
         if analysis.get("market_home_ml"):
-            lines.append(f"  Home ML: {analysis['market_home_ml']:>+5d}")
+            lines.append(f"  Home ML: {int(analysis['market_home_ml']):>+5d}")
         if analysis.get("market_away_ml"):
-            lines.append(f"  Away ML: {analysis['market_away_ml']:>+5d}")
+            lines.append(f"  Away ML: {int(analysis['market_away_ml']):>+5d}")
         if analysis.get("market_total"):
             lines.append(f"  Total: {analysis['market_total']}")
         if analysis.get("game_time"):
