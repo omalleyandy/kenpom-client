@@ -28,6 +28,64 @@ from kenpom_client.prediction import predict_game
 # Home court advantage in college basketball (points)
 HOME_COURT_ADVANTAGE = 3.5
 
+# Team name aliases: maps overtime.ag names to KenPom names
+# Format: "overtime_name": ["kenpom_name", "alt1", "alt2", ...]
+TEAM_ALIASES: dict[str, list[str]] = {
+    # Virginia/VCU variations
+    "Va Commonwealth": ["VCU", "Virginia Commonwealth"],
+    "VCU": ["VCU", "Virginia Commonwealth"],
+    # Wright State
+    "Wright State": ["Wright St."],
+    "Wright St": ["Wright St."],
+    # St. Joseph's variations
+    "St. Josephs": ["Saint Joseph's", "St. Joseph's"],
+    "St Josephs": ["Saint Joseph's", "St. Joseph's"],
+    "Saint Josephs": ["Saint Joseph's"],
+    # North Dakota State
+    "North Dakota State": ["North Dakota St."],
+    "North Dakota St": ["North Dakota St."],
+    "NDSU": ["North Dakota St."],
+    # IU Indianapolis (formerly IUPUI)
+    "IU Indianapolis": ["IU Indy", "IUPUI", "IU Indianapolis"],
+    "IUPUI": ["IU Indy", "IUPUI"],
+    # UC Irvine
+    "Cal Irvine": ["UC Irvine", "California Irvine"],
+    "UC Irvine": ["UC Irvine"],
+    "UCI": ["UC Irvine"],
+    # Saint Mary's (California)
+    "Saint Marys CA": ["Saint Mary's", "St. Mary's"],
+    "Saint Marys": ["Saint Mary's", "St. Mary's"],
+    "St Marys": ["Saint Mary's", "St. Mary's"],
+    # Sacramento State
+    "Sacramento State": ["Sacramento St."],
+    "Sacramento St": ["Sacramento St."],
+    "Sac State": ["Sacramento St."],
+    # Cal State Northridge
+    "CS Northridge": ["Cal St. Northridge", "CSUN", "Northridge"],
+    "Cal State Northridge": ["Cal St. Northridge", "CSUN"],
+    "CSUN": ["Cal St. Northridge"],
+    # UTEP
+    "Texas El Paso": ["UTEP"],
+    # Common abbreviations
+    "UNC": ["North Carolina"],
+    "USC": ["Southern California"],
+    "UCLA": ["UCLA"],
+    "LSU": ["LSU"],
+    "SMU": ["SMU"],
+    "TCU": ["TCU"],
+    "UCF": ["UCF"],
+    "UConn": ["Connecticut"],
+    "UNLV": ["UNLV"],
+    "UTSA": ["UT San Antonio"],
+    "Ole Miss": ["Mississippi"],
+    # Other common variations
+    "Loyola Chicago": ["Loyola Chicago"],
+    "Loyola-Chicago": ["Loyola Chicago"],
+    "Miami FL": ["Miami FL"],
+    "Miami OH": ["Miami OH"],
+    "Texas A&M": ["Texas A&M"],
+}
+
 
 def load_todays_odds(odds_date: Optional[date] = None) -> pd.DataFrame:
     """Load today's games from overtime.ag odds file.
@@ -106,17 +164,66 @@ def load_enriched_snapshot(snapshot_path: Path) -> pd.DataFrame:
     return pd.read_csv(snapshot_path)
 
 
-def find_team(df: pd.DataFrame, team_name: str) -> Optional[pd.Series]:
-    """Find a team in the snapshot (case-insensitive, fuzzy matching)."""
-    # Try exact match first
-    exact_match = df[df["team"].str.lower() == team_name.lower()]
-    if not exact_match.empty:
-        return exact_match.iloc[0]
+def normalize_team_name(team_name: str) -> list[str]:
+    """Get all possible normalized names for a team.
 
-    # Try partial match (contains)
-    partial_match = df[df["team"].str.contains(team_name, case=False, na=False)]
-    if not partial_match.empty:
-        return partial_match.iloc[0]
+    Args:
+        team_name: Raw team name from odds source
+
+    Returns:
+        List of possible KenPom names to try (in priority order)
+    """
+    names_to_try = [team_name]
+
+    # Check alias mapping
+    if team_name in TEAM_ALIASES:
+        names_to_try.extend(TEAM_ALIASES[team_name])
+
+    # Also check case-insensitive alias matching
+    team_lower = team_name.lower()
+    for alias, kenpom_names in TEAM_ALIASES.items():
+        if alias.lower() == team_lower:
+            names_to_try.extend(kenpom_names)
+
+    return names_to_try
+
+
+def find_team(df: pd.DataFrame, team_name: str) -> Optional[pd.Series]:
+    """Find a team in the snapshot (case-insensitive, fuzzy matching).
+
+    Uses TEAM_ALIASES mapping to handle name variations between
+    overtime.ag and KenPom naming conventions.
+    """
+    # Get all possible names to try
+    names_to_try = normalize_team_name(team_name)
+
+    # Try exact match for each possible name
+    for name in names_to_try:
+        exact_match = df[df["team"].str.lower() == name.lower()]
+        if not exact_match.empty:
+            return exact_match.iloc[0]
+
+    # Try partial match (contains) for each possible name
+    for name in names_to_try:
+        # Escape special regex characters
+        escaped_name = name.replace(".", r"\.").replace("'", ".")
+        partial_match = df[df["team"].str.contains(escaped_name, case=False, na=False, regex=True)]
+        if not partial_match.empty:
+            return partial_match.iloc[0]
+
+    # Last resort: try matching significant words (for cases like "St. Josephs" vs "Saint Joseph's")
+    # Extract significant words (3+ chars, not common words)
+    common_words = {"the", "of", "at", "st.", "st", "state", "university"}
+    significant_words = [
+        w for w in team_name.lower().replace(".", " ").split() if len(w) >= 3 and w not in common_words
+    ]
+
+    if significant_words:
+        # Try to find a team containing all significant words
+        for _, row in df.iterrows():
+            team_lower = row["team"].lower()
+            if all(word in team_lower for word in significant_words):
+                return row
 
     return None
 

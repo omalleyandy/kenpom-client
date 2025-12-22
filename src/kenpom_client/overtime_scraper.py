@@ -144,29 +144,62 @@ class OvertimeScraper:
         try:
             print("Navigating to NCAA Basketball section...")
 
-            # Click Basketball icon to expand section
-            basketball_icon = page.locator("#img_Basketball")
-            if basketball_icon.is_visible(timeout=2000):
-                basketball_icon.click()
-                page.wait_for_timeout(1000)
-                print("Clicked Basketball section")
+            # Wait for page to fully load after login
+            page.wait_for_load_state("networkidle", timeout=10000)
 
-            # Click College Basketball label (use JS if not enabled)
-            college_selector = "label[for='gl_Basketball_College_Basketball_G']"
+            # Try multiple selectors for Basketball section
+            basketball_selectors = [
+                "#img_Basketball",
+                "img[id*='Basketball']",
+                "[id*='Basketball'][class*='sport']",
+                "text=Basketball",
+            ]
 
-            try:
-                college_bball = page.locator(college_selector)
-                if college_bball.is_visible(timeout=2000):
-                    # Force click using JS (bypasses enabled check)
-                    page.evaluate(
-                        "(element) => element.click()",
-                        college_bball.element_handle(),
-                    )
-                    page.wait_for_timeout(2000)
-                    print("Navigated to College Basketball (JS click)")
-                    return True
-            except Exception as e:
-                print(f"JS click failed: {e}")
+            basketball_clicked = False
+            for selector in basketball_selectors:
+                try:
+                    basketball_icon = page.locator(selector).first
+                    if basketball_icon.is_visible(timeout=2000):
+                        basketball_icon.click()
+                        page.wait_for_timeout(1500)
+                        print(f"Clicked Basketball section (selector: {selector})")
+                        basketball_clicked = True
+                        break
+                except Exception:
+                    continue
+
+            if not basketball_clicked:
+                print("WARNING: Could not click Basketball icon, trying direct navigation...")
+
+            # Multiple selectors for College Basketball
+            college_selectors = [
+                "label[for='gl_Basketball_College_Basketball_G']",
+                "label:has-text('College Basketball')",
+                "text=College Basketball",
+                "[ng-click*='College_Basketball']",
+            ]
+
+            for selector in college_selectors:
+                try:
+                    college_bball = page.locator(selector).first
+                    if college_bball.is_visible(timeout=3000):
+                        # Force click using JS (bypasses enabled check)
+                        page.evaluate(
+                            "(element) => element.click()",
+                            college_bball.element_handle(),
+                        )
+                        page.wait_for_timeout(2000)
+                        print(f"Navigated to College Basketball (selector: {selector})")
+                        return True
+                except Exception as e:
+                    print(f"Selector {selector} failed: {e}")
+                    continue
+
+            # Save debug screenshot on failure
+            screenshot_dir = Path("data/screenshots")
+            screenshot_dir.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(screenshot_dir / "navigation_failed.png"))
+            print(f"Debug screenshot saved to {screenshot_dir / 'navigation_failed.png'}")
 
             print("ERROR: Could not navigate to College Basketball")
             return False
@@ -506,11 +539,15 @@ class OvertimeScraper:
 
 def main():
     """CLI entry point for scraping overtime.ag odds."""
+    from datetime import date
+
     scraper = OvertimeScraper(headless=True)  # Headless for production/CI
     df = scraper.fetch_ncaab_odds()
 
     if not df.empty:
-        output_path = Path("data/overtime_odds.csv")
+        today = date.today().isoformat()
+        output_path = Path(f"data/overtime_ncaab_odds_{today}.csv")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(output_path, index=False)
         print(f"\nScraped {len(df)} games")
         print(f"Odds exported to: {output_path}")
