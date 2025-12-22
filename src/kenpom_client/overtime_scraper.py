@@ -175,6 +175,112 @@ class OvertimeScraper:
             print(f"Navigation failed: {e}")
             return False
 
+    def _extract_from_dom(self, page: Page) -> list[dict]:
+        """Extract game data directly from DOM elements.
+
+        This is a fallback method when Angular scope extraction fails.
+        Queries specific DOM elements to extract game data.
+        """
+        return page.evaluate("""
+            () => {
+                const games = [];
+
+                // Find all game line containers
+                const gameLineContainers = document.querySelectorAll('.gameLineInfo');
+                console.log('Found', gameLineContainers.length, 'game line containers');
+
+                gameLineContainers.forEach((container, idx) => {
+                    try {
+                        // Get game time
+                        const timeEl = container.querySelector('[ng-bind*="formatGameTime"]');
+                        const zoneEl = container.querySelector('[ng-bind*="formatGameZone"]');
+                        const gameTime = timeEl && zoneEl ?
+                            (timeEl.textContent.trim() + zoneEl.textContent.trim()) : null;
+
+                        // Get team names - Team1 is away, Team2 is home
+                        const team1El = container.querySelector('[ng-bind*="Team1ID"]');
+                        const team2El = container.querySelector('[ng-bind*="Team2ID"]');
+
+                        if (!team1El || !team2El) {
+                            console.log('Game', idx, ': Missing team elements');
+                            return;
+                        }
+
+                        const awayTeam = team1El.textContent.trim();
+                        const homeTeam = team2El.textContent.trim();
+
+                        // Helper to parse odds like "+22  -111" or "O 146 -112"
+                        function parseOdds(text) {
+                            if (!text || text === '-') return { value: null, price: null };
+                            // Handle spread/ML: "+22  -111" or "-600"
+                            const match = text.match(/([+-]?[\\d½.]+)\\s+(-?\\d+)/);
+                            if (match) {
+                                return {
+                                    value: match[1].replace('½', '.5'),
+                                    price: match[2]
+                                };
+                            }
+                            // Handle total: "O 146 -112" or "U 146½ -110"
+                            const totalMatch = text.match(/([OU])\\s*([\\d½.]+)\\s*(-?\\d+)/);
+                            if (totalMatch) {
+                                return {
+                                    ou: totalMatch[1],
+                                    value: totalMatch[2].replace('½', '.5'),
+                                    price: totalMatch[3]
+                                };
+                            }
+                            // Single value like "-600" for ML
+                            const singleMatch = text.match(/^([+-]\\d+)$/);
+                            if (singleMatch) {
+                                return { value: singleMatch[1], price: null };
+                            }
+                            return { value: null, price: null };
+                        }
+
+                        // Get spreads - buttons with id starting with "S1_" and "S2_"
+                        const spread1Btn = container.querySelector('[id^="S1_"] .ng-binding');
+                        const spread2Btn = container.querySelector('[id^="S2_"] .ng-binding');
+                        const awaySpread = parseOdds(spread1Btn?.textContent);
+                        const homeSpread = parseOdds(spread2Btn?.textContent);
+
+                        // Get moneylines - buttons with id starting with "M1_" and "M2_"
+                        const ml1Btn = container.querySelector('[id^="M1_"] .ng-binding');
+                        const ml2Btn = container.querySelector('[id^="M2_"] .ng-binding');
+                        const awayML = parseOdds(ml1Btn?.textContent);
+                        const homeML = parseOdds(ml2Btn?.textContent);
+
+                        // Get totals - buttons with id starting with "L1_" and "L2_"
+                        const total1Btn = container.querySelector('[id^="L1_"] .ng-binding');
+                        const total2Btn = container.querySelector('[id^="L2_"] .ng-binding');
+                        const overTotal = parseOdds(total1Btn?.textContent);
+                        const underTotal = parseOdds(total2Btn?.textContent);
+
+                        const game = {
+                            away_team: awayTeam,
+                            home_team: homeTeam,
+                            spread: homeSpread.value,
+                            spread_price: homeSpread.price,
+                            away_ml: awayML.value ? parseInt(awayML.value) : null,
+                            home_ml: homeML.value ? parseInt(homeML.value) : null,
+                            total: overTotal.value || underTotal.value,
+                            over_price: overTotal.price,
+                            under_price: underTotal.price,
+                            game_time: gameTime,
+                        };
+
+                        console.log('Game', idx, ':', awayTeam, '@', homeTeam);
+                        games.push(game);
+
+                    } catch (e) {
+                        console.error('Error parsing game', idx, ':', e);
+                    }
+                });
+
+                console.log('Total games extracted:', games.length);
+                return games;
+            }
+        """)
+
     def scrape_games(self, page: Page) -> list[GameOdds]:
         """Scrape all NCAA Basketball games and odds.
 
@@ -313,6 +419,12 @@ class OvertimeScraper:
 
             print(f"\nExtracted {len(game_data)} games from Angular scope")
 
+            # If Angular extraction failed, try DOM-based extraction
+            if not game_data:
+                print("\nAngular extraction failed. Trying DOM-based extraction...")
+                game_data = self._extract_from_dom(page)
+                print(f"Extracted {len(game_data)} games from DOM")
+
             # Convert to GameOdds objects
             for game in game_data:
                 try:
@@ -394,7 +506,7 @@ class OvertimeScraper:
 
 def main():
     """CLI entry point for scraping overtime.ag odds."""
-    scraper = OvertimeScraper(headless=False)  # Headed for debugging
+    scraper = OvertimeScraper(headless=True)  # Headless for production/CI
     df = scraper.fetch_ncaab_odds()
 
     if not df.empty:
