@@ -306,13 +306,15 @@ def format_game_analysis(analysis: dict) -> str:
     lines.append(f"  Confidence: {analysis['confidence']}")
 
     # Market odds (if available)
-    if analysis.get("market_spread") is not None:
+    if analysis.get("market_spread") is not None and not pd.isna(analysis.get("market_spread")):
         lines.append("\nMarket Odds:")
         lines.append(f"  Spread: {analysis['market_spread']:>+5.1f} ({analysis.get('spread_odds', 'N/A')})")
-        if analysis.get("market_home_ml"):
-            lines.append(f"  Home ML: {int(analysis['market_home_ml']):>+5d}")
-        if analysis.get("market_away_ml"):
-            lines.append(f"  Away ML: {int(analysis['market_away_ml']):>+5d}")
+        home_ml = analysis.get("market_home_ml")
+        away_ml = analysis.get("market_away_ml")
+        if home_ml is not None and not pd.isna(home_ml):
+            lines.append(f"  Home ML: {int(home_ml):>+5d}")
+        if away_ml is not None and not pd.isna(away_ml):
+            lines.append(f"  Away ML: {int(away_ml):>+5d}")
         if analysis.get("market_total"):
             lines.append(f"  Total: {analysis['market_total']}")
         if analysis.get("game_time"):
