@@ -28,6 +28,7 @@ from kenpom_client.prediction import predict_game
 # Home court advantage in college basketball (points)
 HOME_COURT_ADVANTAGE = 3.5
 
+
 def load_todays_odds(odds_date: Optional[date] = None) -> pd.DataFrame:
     """Load today's games from overtime.ag odds file.
 
@@ -263,12 +264,55 @@ def analyze_game(
         "over_odds": market_odds.get("over_odds"),
         "under_odds": market_odds.get("under_odds"),
         "game_time": market_odds.get("game_time"),
+        # ===== NORMALIZED MARKET VALUES (absolute values with labels) =====
+        # Spread: favorite team and points (always positive)
+        "spread_favorite": (
+            home["team"] if (market_odds.get("market_spread") or 0) < 0 else away["team"]
+        )
+        if market_odds.get("market_spread") is not None
+        and not pd.isna(market_odds.get("market_spread"))
+        else None,
+        "spread_points": abs(market_odds.get("market_spread"))
+        if market_odds.get("market_spread") is not None
+        and not pd.isna(market_odds.get("market_spread"))
+        else None,
+        # Moneyline: favorite and underdog with absolute odds
+        "ml_favorite": (home["team"] if (market_odds.get("home_ml") or 0) < 0 else away["team"])
+        if market_odds.get("home_ml") is not None and not pd.isna(market_odds.get("home_ml"))
+        else None,
+        "ml_favorite_odds": min(
+            abs(market_odds.get("home_ml") or 0), abs(market_odds.get("away_ml") or 0)
+        )
+        if market_odds.get("home_ml") is not None and market_odds.get("away_ml") is not None
+        else None,
+        "ml_underdog_odds": max(
+            abs(market_odds.get("home_ml") or 0), abs(market_odds.get("away_ml") or 0)
+        )
+        if market_odds.get("home_ml") is not None and market_odds.get("away_ml") is not None
+        else None,
         # ===== EDGE CALCULATIONS (KenPom vs Market) =====
+        # Edge = KenPom predicted margin + market spread (same sign convention)
+        # Positive edge = value on HOME, Negative edge = value on AWAY
+        # Example: KenPom says home -37, market is home -34.5 → edge = 37 - 34.5 = +2.5 on home
         "spread_edge": (
-            prediction.margin_enhanced - market_odds.get("market_spread", 0)
+            prediction.margin_enhanced + market_odds.get("market_spread", 0)
             if market_odds.get("market_spread") is not None
+            and not pd.isna(market_odds.get("market_spread"))
             else None
         ),
+        # Normalized edge: which team to bet on and by how many points
+        "edge_team": (
+            home["team"]
+            if (prediction.margin_enhanced + market_odds.get("market_spread", 0)) > 0
+            else away["team"]
+        )
+        if market_odds.get("market_spread") is not None
+        and not pd.isna(market_odds.get("market_spread"))
+        else None,
+        "edge_points": abs(prediction.margin_enhanced + market_odds.get("market_spread", 0))
+        if market_odds.get("market_spread") is not None
+        and not pd.isna(market_odds.get("market_spread"))
+        else None,
     }
 
 
@@ -305,26 +349,34 @@ def format_game_analysis(analysis: dict) -> str:
     lines.append(f"  {analysis['away_team']} Win Probability: {analysis['away_win_prob']:.1%}")
     lines.append(f"  Confidence: {analysis['confidence']}")
 
-    # Market odds (if available)
-    if analysis.get("market_spread") is not None and not pd.isna(analysis.get("market_spread")):
+    # Market odds (if available) - using normalized values
+    if analysis.get("spread_favorite") is not None:
         lines.append("\nMarket Odds:")
-        lines.append(f"  Spread: {analysis['market_spread']:>+5.1f} ({analysis.get('spread_odds', 'N/A')})")
-        home_ml = analysis.get("market_home_ml")
-        away_ml = analysis.get("market_away_ml")
-        if home_ml is not None and not pd.isna(home_ml):
-            lines.append(f"  Home ML: {int(home_ml):>+5d}")
-        if away_ml is not None and not pd.isna(away_ml):
-            lines.append(f"  Away ML: {int(away_ml):>+5d}")
+        # Normalized spread display: "Favorite by X pts"
+        lines.append(
+            f"  Spread: {analysis['spread_favorite']} by {analysis['spread_points']:.1f} pts"
+        )
+
+        # Normalized moneyline display
+        if analysis.get("ml_favorite") is not None:
+            ml_fav = analysis["ml_favorite"]
+            ml_dog = (
+                analysis["away_team"] if ml_fav == analysis["home_team"] else analysis["home_team"]
+            )
+            lines.append(
+                f"  Moneyline: {ml_fav} -{analysis['ml_favorite_odds']:.0f} / {ml_dog} +{analysis['ml_underdog_odds']:.0f}"
+            )
+
         if analysis.get("market_total"):
             lines.append(f"  Total: {analysis['market_total']}")
         if analysis.get("game_time"):
             lines.append(f"  Game Time: {analysis['game_time']}")
 
-        # Edge calculation
-        if analysis.get("spread_edge") is not None:
-            edge = analysis["spread_edge"]
-            edge_label = "HOME" if edge > 0 else "AWAY"
-            lines.append(f"\n  *** EDGE: {abs(edge):.1f} pts on {edge_label} ***")
+        # Edge calculation - using normalized values
+        if analysis.get("edge_team") is not None:
+            lines.append(
+                f"\n  *** EDGE: {analysis['edge_points']:.1f} pts on {analysis['edge_team']} ***"
+            )
 
     return "\n".join(lines)
 
@@ -347,7 +399,9 @@ def main():
     # Find enriched snapshot (try today, then yesterday)
     snapshot_paths = [
         Path(f"data/kenpom_ratings_2025_{date_str}_enriched.csv"),
-        Path(f"data/kenpom_ratings_2025_{(today.replace(day=today.day - 1)).strftime('%Y-%m-%d')}_enriched.csv"),
+        Path(
+            f"data/kenpom_ratings_2025_{(today.replace(day=today.day - 1)).strftime('%Y-%m-%d')}_enriched.csv"
+        ),
     ]
 
     snapshot_path = None
@@ -358,7 +412,9 @@ def main():
 
     if snapshot_path is None:
         print(f"ERROR: No enriched snapshot found. Tried: {[str(p) for p in snapshot_paths]}")
-        print(f"Run: uv run kenpom ratings --y 2025 --date {date_str} --four-factors --point-dist --sigma")
+        print(
+            f"Run: uv run kenpom ratings --y 2025 --date {date_str} --four-factors --point-dist --sigma"
+        )
         return
 
     print(f"Loading enriched KenPom snapshot: {snapshot_path}")
@@ -406,15 +462,15 @@ def main():
             margin = abs(game["predicted_margin"])
             print(f"  {i}. {favorite} by {margin:.1f} points")
 
-        # Best edges (KenPom vs Market)
-        games_with_edge = [a for a in valid_analyses if a.get("spread_edge") is not None]
+        # Best edges (KenPom vs Market) - using normalized values
+        games_with_edge = [a for a in valid_analyses if a.get("edge_team") is not None]
         if games_with_edge:
-            sorted_by_edge = sorted(games_with_edge, key=lambda x: abs(x["spread_edge"]), reverse=True)
+            sorted_by_edge = sorted(games_with_edge, key=lambda x: x["edge_points"], reverse=True)
             print("\nBest Spread Edges (KenPom vs Market):")
             for i, game in enumerate(sorted_by_edge[:5], 1):
-                edge = game["spread_edge"]
-                side = game["home_team"] if edge > 0 else game["away_team"]
-                print(f"  {i}. {side} ({abs(edge):+.1f} pts) - {game['away_team']} @ {game['home_team']}")
+                print(
+                    f"  {i}. {game['edge_team']} (+{game['edge_points']:.1f} pts) - {game['away_team']} @ {game['home_team']}"
+                )
 
         # Most uncertain games (highest sigma)
         sorted_by_sigma = sorted(valid_analyses, key=lambda x: x["avg_sigma"], reverse=True)
