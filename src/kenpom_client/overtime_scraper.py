@@ -175,6 +175,121 @@ class OvertimeScraper:
             print(f"Navigation failed: {e}")
             return False
 
+    def _extract_from_dom(self, page: Page) -> list[dict]:
+        """Extract game data directly from DOM elements.
+
+        This is a fallback method when Angular scope extraction fails.
+        """
+        return page.evaluate("""
+            () => {
+                const games = [];
+
+                // Find all game rows - they contain team info and odds
+                // Look for elements with "+Pb" button which indicates a game row
+                const gameRows = document.querySelectorAll('[class*="game"], [class*="event"]');
+
+                // Alternative: Find games by looking for team name patterns
+                // Each game has two teams displayed in rows
+                const allText = document.body.innerText;
+                const lines = allText.split('\\n').filter(l => l.trim());
+
+                // Look for game time patterns like "6:00 PM (EST)"
+                let currentTime = null;
+                let currentGame = {};
+                let awayTeam = null;
+                let homeTeam = null;
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+
+                    // Match time pattern
+                    const timeMatch = line.match(/^(\\d{1,2}:\\d{2}\\s*(AM|PM)\\s*\\(\\w+\\))/i);
+                    if (timeMatch) {
+                        currentTime = timeMatch[1];
+                        continue;
+                    }
+
+                    // Match game description like "Siena at Indiana - COLLEGE BASKETBALL"
+                    const gameMatch = line.match(/^([\\w\\s\\.]+)\\s+at\\s+([\\w\\s\\.]+)\\s*-/i);
+                    if (gameMatch) {
+                        awayTeam = gameMatch[1].trim();
+                        homeTeam = gameMatch[2].trim();
+                        continue;
+                    }
+
+                    // Match team line with number, name, and odds
+                    // Format: "813 Siena +22 -111 - O 146 -112"
+                    // or "815 Princeton +10 -108 +446 O 139½ -110"
+                    const teamLineMatch = line.match(
+                        /^(\\d+)\\s+([A-Za-z][\\w\\s\\.]+?)\\s+([+-]?[\\d½]+)\\s+(-?\\d+)/
+                    );
+                    if (teamLineMatch) {
+                        const teamNum = teamLineMatch[1];
+                        const teamName = teamLineMatch[2].trim();
+                        const spread = teamLineMatch[3];
+                        const spreadPrice = teamLineMatch[4];
+
+                        // Extract moneyline and total from rest of line
+                        const restOfLine = line.substring(teamLineMatch[0].length).trim();
+
+                        // Parse moneyline (could be "-" or a number like +446 or -600)
+                        let ml = null;
+                        let total = null;
+                        let totalPrice = null;
+
+                        const mlMatch = restOfLine.match(/^([+-]\\d+|-)\\s*/);
+                        if (mlMatch) {
+                            ml = mlMatch[1] !== '-' ? mlMatch[1] : null;
+                        }
+
+                        // Parse total (O 146 -112 or U 146 -108)
+                        const totalMatch = restOfLine.match(/([OU])\\s*([\\d½]+)\\s*(-?\\d+)/);
+                        if (totalMatch) {
+                            total = totalMatch[2];
+                            totalPrice = totalMatch[3];
+                        }
+
+                        // Determine if this is away or home team based on team number (odd = away)
+                        const isAway = parseInt(teamNum) % 2 === 1;
+
+                        if (isAway) {
+                            currentGame = {
+                                game_time: currentTime,
+                                away_team: teamName,
+                                away_num: teamNum,
+                                away_spread: spread,
+                                away_spread_price: spreadPrice,
+                                away_ml: ml,
+                                over_total: total,
+                                over_price: totalPrice,
+                            };
+                        } else {
+                            // This is home team - complete the game
+                            if (currentGame.away_team) {
+                                games.push({
+                                    away_team: currentGame.away_team,
+                                    home_team: teamName,
+                                    spread: spread.replace('½', '.5'),
+                                    spread_price: spreadPrice,
+                                    away_ml: currentGame.away_ml ?
+                                        parseInt(currentGame.away_ml) : null,
+                                    home_ml: ml ? parseInt(ml) : null,
+                                    total: currentGame.over_total ?
+                                        currentGame.over_total.replace('½', '.5') : total?.replace('½', '.5'),
+                                    over_price: currentGame.over_price,
+                                    under_price: totalPrice,
+                                    game_time: currentGame.game_time,
+                                });
+                                currentGame = {};
+                            }
+                        }
+                    }
+                }
+
+                return games;
+            }
+        """)
+
     def scrape_games(self, page: Page) -> list[GameOdds]:
         """Scrape all NCAA Basketball games and odds.
 
@@ -312,6 +427,12 @@ class OvertimeScraper:
             """)
 
             print(f"\nExtracted {len(game_data)} games from Angular scope")
+
+            # If Angular extraction failed, try DOM-based extraction
+            if not game_data:
+                print("\nAngular extraction failed. Trying DOM-based extraction...")
+                game_data = self._extract_from_dom(page)
+                print(f"Extracted {len(game_data)} games from DOM")
 
             # Convert to GameOdds objects
             for game in game_data:
