@@ -29,13 +29,22 @@ def cover_probability(predicted_margin: float, spread: float, avg_sigma: float) 
 
     Args:
         predicted_margin: Model's predicted margin (positive = home wins by X)
-        spread: Market spread from home perspective (negative = home favored)
+        spread: Market spread in betting convention (negative = home favored)
         avg_sigma: Standard deviation of game outcomes
 
     Returns:
         Probability that home team covers the spread
+
+    Example:
+        If predicted_margin=20.7 and spread=-18 (home favored by 18):
+        Home covers if they win by MORE than 18.
+        z = (20.7 + (-18)) / sigma = 2.7 / sigma
+        P(cover) ≈ 60% (not 100%)
     """
-    z_score = (predicted_margin - spread) / avg_sigma
+    # Home covers if actual_margin > -spread
+    # P(margin > -spread) = Φ((predicted_margin - (-spread)) / sigma)
+    #                     = Φ((predicted_margin + spread) / sigma)
+    z_score = (predicted_margin + spread) / avg_sigma
     return normal_cdf(z_score)
 
 
@@ -107,8 +116,11 @@ def analyze_spread_edge(
         Dictionary with spread edge analysis
     """
     # Calculate edge (model vs market)
-    # If model says home -10 and market says home -7, edge = 3 on home
-    spread_edge = predicted_margin - market_spread
+    # market_spread uses betting convention: negative = home favored
+    # predicted_margin: positive = home wins by X
+    # If model says home wins by 20.7 and market has home -18.0 (favored by 18):
+    #   edge = 20.7 + (-18.0) = 2.7 points on home
+    spread_edge = predicted_margin + market_spread
 
     # Cover probabilities
     home_cover_prob = cover_probability(predicted_margin, market_spread, avg_sigma)
