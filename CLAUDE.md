@@ -278,6 +278,13 @@ The project includes automated scraping of real market odds from overtime.ag usi
 - Runs daily at 4:00 AM PST
 - Uses XML template to avoid PowerShell cmdlet format issues
 
+**calculate_real_edge.py** ([calculate_real_edge.py](calculate_real_edge.py))
+- Calculates betting edge by comparing model predictions to market odds
+- Analyzes both point spreads and moneylines
+- Includes Kelly Criterion bet sizing recommendations
+- Exports detailed analysis to `data/betting_edge_analysis_YYYY-MM-DD.csv`
+- Uses dynamic dates (runs for today's games automatically)
+
 ### Critical Implementation Details
 
 **Path Resolution**:
@@ -300,7 +307,9 @@ The project includes automated scraping of real market odds from overtime.ag usi
 2. Save to `data/overtime_ncaab_odds_YYYY-MM-DD.csv`
 3. Automatically run `analyze_todays_games.py`
 4. Generate predictions with KenPom + market odds
-5. Log everything to `logs/odds_fetch.log`
+5. Run `calculate_real_edge.py` for detailed betting edge analysis
+6. Output betting opportunities with Kelly Criterion sizing to `data/betting_edge_analysis_YYYY-MM-DD.csv`
+7. Log everything to `logs/odds_fetch.log`
 
 ### Testing the Workflow
 
