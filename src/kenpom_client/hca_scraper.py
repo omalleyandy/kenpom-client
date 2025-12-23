@@ -296,6 +296,25 @@ class HCAScraper:
             page.screenshot(path=str(screenshots_dir / "kenpom_login_page.png"))
             print(f"Screenshot saved to {screenshots_dir / 'kenpom_login_page.png'}")
 
+            # Check page title/content to see if we're really on login page
+            page_title = page.title()
+            page_content = page.content()
+            print(f"Page title: {page_title}")
+
+            # If page still shows Cloudflare content, prompt user
+            if "just a moment" in page_content.lower() or "checking" in page_content.lower():
+                if not self.headless:
+                    print("\n" + "=" * 60)
+                    print("PAGE STILL LOADING / CLOUDFLARE ACTIVE")
+                    print("=" * 60)
+                    print("The page hasn't fully loaded yet.")
+                    print("Wait for the page to load completely, then press ENTER.")
+                    print("DO NOT close the browser!")
+                    print("=" * 60)
+                    input("\nPress ENTER when the login page is visible...")
+                    page.wait_for_timeout(2000)
+                    page.screenshot(path=str(screenshots_dir / "kenpom_after_wait.png"))
+
             # Check for CAPTCHA/challenge (might appear before login form)
             captcha_selectors = [
                 "iframe[src*='captcha']",
@@ -354,33 +373,66 @@ class HCAScraper:
                 page.screenshot(path=str(screenshots_dir / "kenpom_login_failed.png"))
                 print(f"Screenshot saved to {screenshots_dir / 'kenpom_login_failed.png'}")
 
+                # Show what the page looks like
+                current_title = page.title()
+                print(f"Current page title: {current_title}")
+                print(f"Current URL: {page.url}")
+
                 if not self.headless:
                     print("\n" + "=" * 60)
                     print("LOGIN FORM NOT FOUND")
                     print("=" * 60)
                     print("The login form couldn't be detected automatically.")
-                    print("Please manually log in using the browser window.")
-                    print("After logging in, come back here.")
+                    print("")
+                    print("Please do the following in the browser window:")
+                    print("1. If you see a Cloudflare challenge, complete it")
+                    print("2. Navigate to the login page if needed")
+                    print("3. Enter your email and password")
+                    print("4. Click Login")
+                    print("5. Wait until you see the KenPom ratings page")
+                    print("")
+                    print("DO NOT close the browser!")
                     print("=" * 60)
-                    input("\nPress ENTER after logging in manually...")
-                    page.wait_for_timeout(2000)
+                    input("\nPress ENTER after you are logged in and see the main page...")
 
-                    # Check if now logged in
+                    # Give extra time for any page transitions
+                    page.wait_for_timeout(3000)
+
+                    # Take screenshot of current state
                     try:
-                        if page.locator("a:has-text('logout')").is_visible(timeout=2000):
-                            print("Manual login successful!")
-                            return True
+                        page.screenshot(path=str(screenshots_dir / "kenpom_after_manual.png"))
+                        print(f"Screenshot saved to {screenshots_dir / 'kenpom_after_manual.png'}")
                     except Exception:
                         pass
 
-                    # Navigate to main page to check
-                    page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
+                    # Check if now logged in - try current page first
                     try:
+                        if page.locator("a:has-text('logout')").is_visible(timeout=3000):
+                            print("Manual login successful!")
+                            return True
+                    except Exception as e:
+                        print(f"Could not check for logout link: {e}")
+
+                    # Try navigating to main page
+                    try:
+                        page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
+                        page.wait_for_timeout(2000)
                         if page.locator("a:has-text('logout')").is_visible(timeout=3000):
                             print("Login verified!")
                             return True
+                    except Exception as e:
+                        print(f"Navigation check failed: {e}")
+
+                    # Last attempt - check if we can see subscriber content
+                    try:
+                        # If we can see the ratings table, we're probably logged in
+                        if page.locator("table").is_visible(timeout=2000):
+                            print("Found table content - assuming logged in")
+                            return True
                     except Exception:
                         pass
+
+                    print("Could not verify login status")
 
                 return False
 
