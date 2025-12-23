@@ -151,15 +151,102 @@ class HCAScraper:
             # Navigate directly to login page
             print("Navigating to login page...")
             page.goto("https://kenpom.com/login.php", wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(3000)
 
-            # Fill login form - KenPom uses 'email' and 'password' fields
-            email_field = page.locator('input[name="email"]')
-            if not email_field.is_visible(timeout=5000):
-                print("ERROR: Could not find email field on login page")
-                screenshots_dir = Path("data/screenshots")
-                screenshots_dir.mkdir(parents=True, exist_ok=True)
+            # Take screenshot for debugging
+            screenshots_dir = Path("data/screenshots")
+            screenshots_dir.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(screenshots_dir / "kenpom_login_page.png"))
+            print(f"Screenshot saved to {screenshots_dir / 'kenpom_login_page.png'}")
+
+            # Check for CAPTCHA first (might appear before login form)
+            captcha_selectors = [
+                "iframe[src*='captcha']",
+                "iframe[src*='recaptcha']",
+                "iframe[src*='challenge']",
+                "#captcha",
+                ".g-recaptcha",
+                ".cf-turnstile",
+                "[class*='captcha']",
+                "[class*='challenge']",
+                "text=verify you are human",
+                "text=I'm not a robot",
+                "text=Verify you are human",
+            ]
+
+            captcha_detected = False
+            for selector in captcha_selectors:
+                try:
+                    if page.locator(selector).is_visible(timeout=500):
+                        captcha_detected = True
+                        break
+                except Exception:
+                    continue
+
+            if captcha_detected and not self.headless:
+                print("\n" + "=" * 60)
+                print("CAPTCHA DETECTED on login page!")
+                print("=" * 60)
+                print("Please complete the CAPTCHA in the browser window.")
+                print("DO NOT close the browser!")
+                print("=" * 60)
+                input("\nPress ENTER after completing the CAPTCHA...")
+                page.wait_for_timeout(2000)
+                page.screenshot(path=str(screenshots_dir / "kenpom_after_captcha.png"))
+
+            # Try multiple selectors for email field
+            email_selectors = [
+                'input[name="email"]',
+                'input[type="email"]',
+                'input#email',
+                'input[placeholder*="email" i]',
+                'input[placeholder*="Email" i]',
+            ]
+
+            email_field = None
+            for selector in email_selectors:
+                try:
+                    field = page.locator(selector)
+                    if field.is_visible(timeout=2000):
+                        email_field = field
+                        print(f"Found email field with selector: {selector}")
+                        break
+                except Exception:
+                    continue
+
+            if not email_field:
+                print("Could not find email field. Taking screenshot...")
                 page.screenshot(path=str(screenshots_dir / "kenpom_login_failed.png"))
+                print(f"Screenshot saved to {screenshots_dir / 'kenpom_login_failed.png'}")
+
+                if not self.headless:
+                    print("\n" + "=" * 60)
+                    print("LOGIN FORM NOT FOUND")
+                    print("=" * 60)
+                    print("The login form couldn't be detected automatically.")
+                    print("Please manually log in using the browser window.")
+                    print("After logging in, come back here.")
+                    print("=" * 60)
+                    input("\nPress ENTER after logging in manually...")
+                    page.wait_for_timeout(2000)
+
+                    # Check if now logged in
+                    try:
+                        if page.locator("a:has-text('logout')").is_visible(timeout=2000):
+                            print("Manual login successful!")
+                            return True
+                    except Exception:
+                        pass
+
+                    # Navigate to main page to check
+                    page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
+                    try:
+                        if page.locator("a:has-text('logout')").is_visible(timeout=3000):
+                            print("Login verified!")
+                            return True
+                    except Exception:
+                        pass
+
                 return False
 
             assert self.username is not None
@@ -167,7 +254,7 @@ class HCAScraper:
             page.wait_for_timeout(300)
 
             # Find and fill password field
-            password_field = page.locator('input[name="password"]')
+            password_field = page.locator('input[name="password"], input[type="password"]').first
             assert self.password is not None
             password_field.fill(self.password)
             page.wait_for_timeout(300)
@@ -184,21 +271,10 @@ class HCAScraper:
             # Wait for redirect after login
             page.wait_for_timeout(3000)
 
-            # Check for CAPTCHA or human verification
-            captcha_selectors = [
-                "iframe[src*='captcha']",
-                "iframe[src*='recaptcha']",
-                "#captcha",
-                ".g-recaptcha",
-                "[class*='captcha']",
-                "text=verify you are human",
-                "text=I'm not a robot",
-            ]
-
-            captcha_detected = False
+            # Check for CAPTCHA after form submission
             for selector in captcha_selectors:
                 try:
-                    if page.locator(selector).is_visible(timeout=1000):
+                    if page.locator(selector).is_visible(timeout=500):
                         captcha_detected = True
                         break
                 except Exception:
@@ -231,9 +307,12 @@ class HCAScraper:
 
             # Check for error message
             error_msg = page.locator(".error, .alert-danger, .login-error")
-            if error_msg.is_visible(timeout=1000):
-                print(f"Login error: {error_msg.text_content()}")
-                return False
+            try:
+                if error_msg.is_visible(timeout=1000):
+                    print(f"Login error: {error_msg.text_content()}")
+                    return False
+            except Exception:
+                pass
 
             # If we're still on login page, might have failed
             print("WARNING: May still be on login page, proceeding anyway...")
