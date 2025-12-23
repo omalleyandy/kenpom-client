@@ -349,6 +349,28 @@ def main():
     print("Market Odds Source: overtime.ag")
     print("=" * 80)
 
+    # Debug: Show all games in each file
+    print("\n" + "-" * 60)
+    print("DEBUG: Game Matching Analysis")
+    print("-" * 60)
+
+    print(f"\nPredictions file: {len(predictions)} games")
+    for _, row in predictions.iterrows():
+        print(f"  {row['away_team']} @ {row['home_team']}")
+
+    # Detect spread column in market data
+    spread_col_name = "home_spread" if "home_spread" in market.columns else "market_spread"
+
+    print(f"\nMarket odds file: {len(market)} games")
+    for _, row in market.iterrows():
+        spread_val = row.get(spread_col_name, "N/A")
+        home_ml = row.get("home_ml", "N/A")
+        away_ml = row.get("away_ml", "N/A")
+        print(
+            f"  {row['away_team']} @ {row['home_team']} | "
+            f"Spread: {spread_val} | ML: {home_ml}/{away_ml}"
+        )
+
     # Merge predictions with market odds
     # Use suffixes to handle overlapping column names
     merged = predictions.merge(
@@ -358,12 +380,33 @@ def main():
         suffixes=("_pred", "_mkt"),
     )
 
+    # Show which games matched and which didn't
+    pred_games = set(zip(predictions["away_team"], predictions["home_team"]))
+    market_games = set(zip(market["away_team"], market["home_team"]))
+    matched_games = pred_games & market_games
+    pred_only = pred_games - market_games
+    market_only = market_games - pred_games
+
+    print(f"\nMatched: {len(matched_games)} games")
+    for away, home in matched_games:
+        print(f"  ✓ {away} @ {home}")
+
+    if pred_only:
+        print(f"\nIn predictions but NOT in market odds: {len(pred_only)} games")
+        for away, home in pred_only:
+            print(f"  ✗ {away} @ {home}")
+
+    if market_only:
+        print(f"\nIn market odds but NOT in predictions: {len(market_only)} games")
+        for away, home in market_only:
+            print(f"  ✗ {away} @ {home}")
+
+    print("-" * 60)
+
     print(f"\n{len(merged)} games with both model predictions and market odds\n")
 
     if len(merged) == 0:
         print("No games matched. Check that team names match between files.")
-        print(f"\nPredictions teams: {predictions[['away_team', 'home_team']].head()}")
-        print(f"\nMarket teams: {market[['away_team', 'home_team']].head()}")
         return
 
     # Determine which columns to use for market data
@@ -398,6 +441,29 @@ def main():
     home_ml_col = get_col(merged, "home_ml", "_mkt")
     away_ml_col = get_col(merged, "away_ml", "_mkt")
 
+    # Debug: Show column mappings and data for each game
+    print("\n" + "-" * 60)
+    print("DEBUG: Column Mappings")
+    print("-" * 60)
+    print(f"  Spread column: {spread_col}")
+    print(f"  Spread odds column: {spread_odds_col}")
+    print(f"  Home ML column: {home_ml_col}")
+    print(f"  Away ML column: {away_ml_col}")
+
+    print("\nDEBUG: Merged game data")
+    for _, row in merged.iterrows():
+        spread_val = row.get(spread_col)
+        spread_odds_val = row.get(spread_odds_col)
+        home_ml_val = row.get(home_ml_col)
+        away_ml_val = row.get(away_ml_col)
+        pred_margin = row.get("predicted_margin")
+        print(
+            f"  {row['away_team']} @ {row['home_team']}: "
+            f"Spread={spread_val}, SpreadOdds={spread_odds_val}, "
+            f"ML={home_ml_val}/{away_ml_val}, PredMargin={pred_margin:.1f}"
+        )
+    print("-" * 60)
+
     # =========================================================================
     # POINT SPREAD ANALYSIS
     # =========================================================================
@@ -413,6 +479,7 @@ def main():
         spread_odds = row.get(spread_odds_col, -110)
 
         if pd.isna(market_spread) or pd.isna(spread_odds):
+            print(f"  Skipping {row['away_team']} @ {row['home_team']}: spread={market_spread}, odds={spread_odds}")
             continue
 
         analysis = analyze_spread_edge(
