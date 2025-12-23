@@ -43,7 +43,18 @@ REM Check if odds were successfully fetched
 if %errorlevel% equ 0 (
     echo [%date% %time%] SUCCESS: Odds fetched successfully
 
-    REM Optional: Run analyze_todays_games.py to generate predictions
+    REM Fetch fresh HCA (Home Court Advantage) data for team-specific predictions
+    REM This runs in headless mode - if CAPTCHA appears, falls back to existing snapshot
+    echo [%date% %time%] Fetching Home Court Advantage data from kenpom.com...
+    "%PYTHON_EXE%" -m kenpom_client.hca_scraper --headless
+
+    if %errorlevel% equ 0 (
+        echo [%date% %time%] SUCCESS: HCA data fetched
+    ) else (
+        echo [%date% %time%] WARNING: HCA fetch failed - using existing snapshot or default 3.5
+    )
+
+    REM Run analyze_todays_games.py to generate predictions
     echo [%date% %time%] Generating game predictions...
     "%PYTHON_EXE%" analyze_todays_games.py
 

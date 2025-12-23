@@ -7,11 +7,16 @@ differentials.
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from kenpom_client.hca_scraper import HCASnapshot
@@ -209,7 +214,8 @@ def calculate_matchup_features(away: pd.Series, home: pd.Series) -> MatchupFeatu
 def load_hca_snapshot() -> Optional["HCASnapshot"]:
     """Load the most recent HCA snapshot from disk.
 
-    Caches the result to avoid repeated file reads.
+    Caches the result to avoid repeated file reads. Logs a warning if the
+    snapshot is older than 7 days to encourage fresh data fetching.
 
     Returns:
         HCASnapshot or None if no snapshot file exists
@@ -225,16 +231,37 @@ def load_hca_snapshot() -> Optional["HCASnapshot"]:
     # Find most recent HCA snapshot
     data_dir = Path("data")
     if not data_dir.exists():
+        logger.warning("No data directory found - using default HCA of %.1f", DEFAULT_HCA)
         return None
 
     hca_files = sorted(data_dir.glob("kenpom_hca_*.json"), reverse=True)
     if not hca_files:
+        logger.warning("No HCA snapshot files found - using default HCA of %.1f", DEFAULT_HCA)
         return None
 
     try:
-        _hca_snapshot_cache = HCASnapshot.from_json(hca_files[0].read_text())
+        latest_file = hca_files[0]
+        _hca_snapshot_cache = HCASnapshot.from_json(latest_file.read_text())
+
+        # Check freshness - warn if snapshot is older than 7 days
+        match = re.search(r"kenpom_hca_(\d{4}-\d{2}-\d{2})\.json", latest_file.name)
+        if match:
+            snapshot_date = datetime.strptime(match.group(1), "%Y-%m-%d")
+            age_days = (datetime.now() - snapshot_date).days
+            if age_days > 7:
+                logger.warning(
+                    "HCA snapshot is %d days old (%s) - consider running 'uv run fetch-hca'",
+                    age_days,
+                    latest_file.name,
+                )
+            else:
+                logger.info("Using HCA snapshot from %s (%d days old)", latest_file.name, age_days)
+
         return _hca_snapshot_cache
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            "Failed to load HCA snapshot: %s - using default HCA of %.1f", e, DEFAULT_HCA
+        )
         return None
 
 
