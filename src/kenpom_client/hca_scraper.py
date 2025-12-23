@@ -592,72 +592,66 @@ class HCAScraper:
                     };
 
                     // Find the main data table
-                    const table = document.getElementById('ratings-table') ||
-                                  document.querySelector('table.sortable') ||
-                                  document.querySelector('table');
+                    const tables = document.querySelectorAll('table');
+                    console.log('Found', tables.length, 'tables');
+
+                    // Find the table with team data (look for one with team.php links)
+                    let table = null;
+                    for (const t of tables) {
+                        if (t.querySelector('a[href*="team.php"]')) {
+                            table = t;
+                            break;
+                        }
+                    }
+
+                    if (!table) {
+                        table = document.getElementById('ratings-table') ||
+                                document.querySelector('table.sortable') ||
+                                document.querySelector('table');
+                    }
 
                     if (!table) {
                         console.log('No table found');
                         return result;
                     }
 
-                    // Get header row to determine column indices
-                    const headerRow = table.querySelector('thead tr') ||
-                                      table.querySelector('tr:first-child');
-                    const headers = headerRow ? Array.from(headerRow.querySelectorAll('th, td'))
-                                                     .map(h => h.textContent.trim().toLowerCase()) : [];
-
-                    console.log('Headers found:', headers);
-
-                    // Find column indices
-                    const teamIdx = headers.findIndex(h => h.includes('team') || h === '');
-                    const confIdx = headers.findIndex(h => h.includes('conf'));
-                    const hcaIdx = headers.findIndex(h => h.includes('hca') || h.includes('home court'));
-                    const homeEmIdx = headers.findIndex(h => h.includes('home') && h.includes('em'));
-                    const awayEmIdx = headers.findIndex(h => h.includes('away') && h.includes('em'));
-
-                    console.log('Column indices:', {teamIdx, confIdx, hcaIdx, homeEmIdx, awayEmIdx});
-
-                    // Get all data rows
-                    const tbody = table.querySelector('tbody') || table;
-                    const rows = Array.from(tbody.querySelectorAll('tr'));
+                    // Get ALL rows from the table (including tbody)
+                    const allRows = table.querySelectorAll('tr');
+                    console.log('Total rows in table:', allRows.length);
 
                     let rank = 0;
-                    rows.forEach((row, idx) => {
-                        // Skip header rows
+                    allRows.forEach((row, idx) => {
+                        // Skip header rows (those with th elements)
                         if (row.querySelector('th')) return;
 
                         const cells = Array.from(row.querySelectorAll('td'));
-                        if (cells.length < 3) return;
+                        if (cells.length < 2) return;
 
-                        // Try to extract team name
-                        let teamName = '';
-                        let conf = '';
-
-                        // Look for team link
+                        // Look for team link - this is the most reliable indicator
                         const teamLink = row.querySelector('a[href*="team.php"]');
-                        if (teamLink) {
-                            teamName = teamLink.textContent.trim();
-                        } else if (cells[0]) {
-                            teamName = cells[0].textContent.trim();
-                        }
+                        if (!teamLink) return;
 
-                        // Skip if no team name
+                        const teamName = teamLink.textContent.trim();
                         if (!teamName) return;
 
-                        // Get conference
-                        if (confIdx >= 0 && cells[confIdx]) {
-                            conf = cells[confIdx].textContent.trim();
+                        // Get conference (usually in a cell with conf link or just text)
+                        let conf = '';
+                        const confLink = row.querySelector('a[href*="conf.php"]');
+                        if (confLink) {
+                            conf = confLink.textContent.trim();
                         }
 
-                        // Get HCA value (look for the numeric column)
+                        // Find the HCA value - it's typically a decimal number between 1.5 and 8
+                        // Look at all cells and find the one that looks like an HCA value
                         let hca = null;
                         for (let i = 0; i < cells.length; i++) {
                             const text = cells[i].textContent.trim();
-                            // HCA values are typically in the 2-7 range
+                            // Skip cells with links (team names, conferences)
+                            if (cells[i].querySelector('a')) continue;
+
                             const num = parseFloat(text);
-                            if (!isNaN(num) && num > 0 && num < 15 && i !== 0) {
-                                // This is likely the HCA value
+                            // HCA values are typically 2.0 - 6.0 range
+                            if (!isNaN(num) && num >= 1.5 && num <= 8.0) {
                                 hca = num;
                                 break;
                             }
