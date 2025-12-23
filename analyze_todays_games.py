@@ -28,6 +28,11 @@ from kenpom_client.matchup import calculate_matchup_features
 from kenpom_client.prediction import predict_game
 from kenpom_client.client import KenPomClient
 from kenpom_client.config import Settings
+from kenpom_client.validation import (
+    PipelineValidator,
+    RunHistoryLogger,
+    create_run_stats,
+)
 
 # NOTE: Home court advantage is now dynamically loaded from KenPom HCA data
 # The hardcoded 3.5 constant has been replaced with team-specific HCA values
@@ -194,18 +199,13 @@ def find_fanmatch_game(
         for home_name in home_names:
             # Try exact match
             for (fm_away, fm_home), prediction in fanmatch_data.items():
-                if (
-                    fm_away.lower() == away_name.lower()
-                    and fm_home.lower() == home_name.lower()
-                ):
+                if fm_away.lower() == away_name.lower() and fm_home.lower() == home_name.lower():
                     return prediction
                 # Try partial match
                 if (
-                    away_name.lower() in fm_away.lower()
-                    or fm_away.lower() in away_name.lower()
+                    away_name.lower() in fm_away.lower() or fm_away.lower() in away_name.lower()
                 ) and (
-                    home_name.lower() in fm_home.lower()
-                    or fm_home.lower() in home_name.lower()
+                    home_name.lower() in fm_home.lower() or fm_home.lower() in home_name.lower()
                 ):
                     return prediction
 
@@ -311,7 +311,9 @@ def find_team(df: pd.DataFrame, team_name: str) -> Optional[pd.Series]:
     # Extract significant words (3+ chars, not common words)
     common_words = {"the", "of", "at", "st.", "st", "state", "university"}
     significant_words = [
-        w for w in team_name.lower().replace(".", " ").split() if len(w) >= 3 and w not in common_words
+        w
+        for w in team_name.lower().replace(".", " ").split()
+        if len(w) >= 3 and w not in common_words
     ]
 
     if significant_words:
@@ -647,15 +649,48 @@ def main():
     today = date.today()
     date_str = today.strftime("%Y-%m-%d")
 
+    # Initialize validation and logging
+    validator = PipelineValidator()
+    history_logger = RunHistoryLogger()
+    run_stats = create_run_stats(stage="predictions", run_date=today)
+
     # Load odds from overtime.ag
     odds_df = load_todays_odds(today)
 
     if odds_df.empty:
         print("ERROR: No odds file found. Run: uv run fetch-odds")
+        run_stats.odds_issues.append("No odds file found")
+        history_logger.log_run(run_stats)
         return
 
     games = get_games_from_odds(odds_df)
+    run_stats.games_scraped = len(games)
     print(f"Found {len(games)} games in odds file\n")
+
+    # Validate odds data
+    print("=" * 60)
+    print("VALIDATING ODDS DATA")
+    print("=" * 60)
+    odds_validation = validator.validate_odds(odds_df)
+    run_stats.odds_validation_passed = odds_validation.passed
+    run_stats.odds_issues = odds_validation.issues
+    run_stats.odds_warnings = odds_validation.warnings
+    run_stats.games_with_spread = odds_validation.stats.get("games_with_spread", 0)
+    run_stats.games_with_moneyline = odds_validation.stats.get("games_with_ml", 0)
+
+    if not odds_validation.passed:
+        print("\nODDS VALIDATION FAILED:")
+        for issue in odds_validation.issues:
+            print(f"  ERROR: {issue}")
+    if odds_validation.warnings:
+        print(f"\nOdds Warnings ({len(odds_validation.warnings)}):")
+        for warning in odds_validation.warnings[:5]:  # Show first 5
+            print(f"  WARNING: {warning}")
+        if len(odds_validation.warnings) > 5:
+            print(f"  ... and {len(odds_validation.warnings) - 5} more warnings")
+    if odds_validation.passed and not odds_validation.warnings:
+        print("  All odds validation checks passed")
+    print()
 
     # Find enriched snapshot (try today, then yesterday)
     snapshot_paths = [
@@ -693,12 +728,48 @@ def main():
     print("=" * 80)
 
     analyses = []
+    unmatched_teams = []
     for away, home in games:
         market_odds = get_market_odds(odds_df, away, home)
         fanmatch_pred = find_fanmatch_game(fanmatch_data, away, home)
         analysis = analyze_game(df, away, home, market_odds, fanmatch_pred)
         analyses.append(analysis)
         print(format_game_analysis(analysis))
+
+        # Track unmatched teams
+        if "error" in analysis and "Team not found" in analysis.get("error", ""):
+            error_msg = analysis["error"]
+            missing_team = error_msg.replace("Team not found:", "").strip()
+            unmatched_teams.append(missing_team)
+
+    # Validate team matching
+    valid_analyses = [a for a in analyses if "error" not in a]
+    team_match_result = validator.validate_team_matching(
+        total_games=len(games),
+        matched_games=len(valid_analyses),
+        unmatched_teams=unmatched_teams,
+    )
+    run_stats.teams_matched = len(valid_analyses)
+    run_stats.teams_unmatched = len(unmatched_teams)
+    run_stats.match_rate = team_match_result.stats.get("match_rate", 0.0)
+
+    print("\n" + "=" * 60)
+    print("TEAM MATCHING VALIDATION")
+    print("=" * 60)
+    print(
+        f"  Match rate: {run_stats.match_rate:.1%} ({run_stats.teams_matched}/{len(games)} games)"
+    )
+    if not team_match_result.passed:
+        print(f"  VALIDATION FAILED - Below {validator.TEAM_MATCH_THRESHOLD:.0%} threshold")
+        for issue in team_match_result.issues:
+            print(f"  ERROR: {issue}")
+    elif team_match_result.warnings:
+        for warning in team_match_result.warnings[:5]:
+            print(f"  WARNING: {warning}")
+        if len(team_match_result.warnings) > 5:
+            print(f"  ... and {len(team_match_result.warnings) - 5} more")
+    else:
+        print("  All teams matched successfully")
 
     # Summary statistics
     print(f"\n\n{'=' * 80}")
@@ -773,11 +844,15 @@ def main():
             if "Team not found:" in error_msg:
                 missing_team = error_msg.replace("Team not found:", "").strip()
                 # Search for similar names in KenPom
-                similar = df[df["team"].str.contains(missing_team[:4], case=False, na=False)]["team"].tolist()
+                similar = df[df["team"].str.contains(missing_team[:4], case=False, na=False)][
+                    "team"
+                ].tolist()
                 if not similar:
                     # Try first word
                     first_word = missing_team.split()[0] if missing_team else ""
-                    similar = df[df["team"].str.contains(first_word, case=False, na=False)]["team"].tolist()
+                    similar = df[df["team"].str.contains(first_word, case=False, na=False)][
+                        "team"
+                    ].tolist()
                 print(f"\n  '{missing_team}':")
                 if similar:
                     print(f"    Possible matches: {similar[:5]}")
@@ -794,11 +869,54 @@ def main():
     except PermissionError:
         # File is locked (likely open in Excel), try backup filename with timestamp
         from datetime import datetime
+
         timestamp = datetime.now().strftime("%H%M%S")
         backup_path = Path(f"data/todays_game_predictions_{date_str}_{timestamp}.csv")
         results_df.to_csv(backup_path, index=False)
         print(f"\nWARNING: Could not write to {output_path} (file locked)")
         print(f"Predictions exported to backup: {backup_path}")
+
+    # Validate predictions output
+    print("\n" + "=" * 60)
+    print("PREDICTIONS VALIDATION")
+    print("=" * 60)
+    pred_validation = validator.validate_predictions(results_df)
+    run_stats.predictions_generated = len(valid_analyses)
+
+    # Count predictions with edge
+    if "kenpom_edge_points" in results_df.columns:
+        edges = results_df["kenpom_edge_points"].dropna()
+        run_stats.predictions_with_edge = len(edges)
+        if len(edges) > 0:
+            run_stats.avg_edge_magnitude = float(edges.abs().mean())
+
+    if not pred_validation.passed:
+        print("  VALIDATION FAILED:")
+        for issue in pred_validation.issues:
+            print(f"    ERROR: {issue}")
+    if pred_validation.warnings:
+        print(f"  Warnings ({len(pred_validation.warnings)}):")
+        for warning in pred_validation.warnings[:5]:
+            print(f"    WARNING: {warning}")
+        if len(pred_validation.warnings) > 5:
+            print(f"    ... and {len(pred_validation.warnings) - 5} more")
+    if pred_validation.passed and not pred_validation.warnings:
+        print("  All prediction validation checks passed")
+
+    # Log run statistics
+    history_logger.log_run(run_stats)
+    print("\n" + "=" * 60)
+    print("RUN STATISTICS LOGGED")
+    print("=" * 60)
+    print(f"  Date: {run_stats.run_date}")
+    print(f"  Games scraped: {run_stats.games_scraped}")
+    print(f"  Games with spread: {run_stats.games_with_spread}")
+    print(f"  Team match rate: {run_stats.match_rate:.1%}")
+    print(f"  Predictions generated: {run_stats.predictions_generated}")
+    print(f"  Predictions with edge: {run_stats.predictions_with_edge}")
+    if run_stats.avg_edge_magnitude > 0:
+        print(f"  Avg edge magnitude: {run_stats.avg_edge_magnitude:.2f} pts")
+    print(f"\n  History saved to: {history_logger.history_file}")
 
 
 if __name__ == "__main__":
