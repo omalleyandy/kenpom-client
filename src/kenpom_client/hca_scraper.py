@@ -184,6 +184,40 @@ class HCAScraper:
             # Wait for redirect after login
             page.wait_for_timeout(3000)
 
+            # Check for CAPTCHA or human verification
+            captcha_selectors = [
+                "iframe[src*='captcha']",
+                "iframe[src*='recaptcha']",
+                "#captcha",
+                ".g-recaptcha",
+                "[class*='captcha']",
+                "text=verify you are human",
+                "text=I'm not a robot",
+            ]
+
+            captcha_detected = False
+            for selector in captcha_selectors:
+                try:
+                    if page.locator(selector).is_visible(timeout=1000):
+                        captcha_detected = True
+                        break
+                except Exception:
+                    continue
+
+            if captcha_detected:
+                if not self.headless:
+                    print("\n" + "=" * 60)
+                    print("CAPTCHA DETECTED!")
+                    print("Please complete it in the browser window.")
+                    print("=" * 60)
+                    input("Press ENTER after completing the CAPTCHA...")
+                    print("Continuing...")
+                    page.wait_for_timeout(2000)
+                else:
+                    print("ERROR: CAPTCHA detected but running in headless mode")
+                    print("Try running with --headed flag to complete CAPTCHA manually")
+                    return False
+
             # Verify login success by checking URL or page content
             current_url = page.url
             if "login" not in current_url.lower():
