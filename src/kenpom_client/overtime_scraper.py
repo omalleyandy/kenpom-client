@@ -295,6 +295,15 @@ class OvertimeScraper:
                         // Helper to parse odds like "+22  -111" or "O 146 -112"
                         function parseOdds(text) {
                             if (!text || text === '-') return { value: null, price: null };
+                            // Handle PK (pick'em) - spread is 0
+                            // Format: "PK  -110" or just "PK"
+                            const pkMatch = text.match(/PK\\s*(-?\\d+)?/i);
+                            if (pkMatch) {
+                                return {
+                                    value: '0',
+                                    price: pkMatch[1] || null
+                                };
+                            }
                             // Handle spread/ML: "+22  -111" or "-600"
                             const match = text.match(/([+-]?[\\d½.]+)\\s+(-?\\d+)/);
                             if (match) {
@@ -518,18 +527,35 @@ class OvertimeScraper:
                 game_data = self._extract_from_dom(page)
                 print(f"Extracted {len(game_data)} games from DOM")
 
+            # Helper to parse spread values (handles PK=0 and explicit 0 values)
+            def parse_spread(value) -> Optional[float]:
+                if value is None:
+                    return None
+                # Handle "PK" (pick'em) - spread is 0
+                if isinstance(value, str):
+                    if value.upper() == "PK":
+                        return 0.0
+                    try:
+                        return float(value)
+                    except ValueError:
+                        return None
+                # Handle numeric 0 (don't treat as falsy)
+                if isinstance(value, (int, float)):
+                    return float(value)
+                return None
+
             # Convert to GameOdds objects
             for game in game_data:
                 try:
                     odds = GameOdds(
                         away_team=game["away_team"],
                         home_team=game["home_team"],
-                        # Spreads - both sides
-                        away_spread=float(game["away_spread"]) if game.get("away_spread") else None,
+                        # Spreads - both sides (use parse_spread to handle PK and 0)
+                        away_spread=parse_spread(game.get("away_spread")),
                         away_spread_odds=int(game["away_spread_price"])
                         if game.get("away_spread_price")
                         else None,
-                        home_spread=float(game["home_spread"]) if game.get("home_spread") else None,
+                        home_spread=parse_spread(game.get("home_spread")),
                         home_spread_odds=int(game["home_spread_price"])
                         if game.get("home_spread_price")
                         else None,
