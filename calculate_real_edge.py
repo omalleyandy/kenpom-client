@@ -7,6 +7,7 @@ to identify actual betting opportunities with quantified edge.
 from __future__ import annotations
 
 import math
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -207,24 +208,29 @@ def analyze_moneyline_edge(model_row: pd.Series, market_row: pd.Series) -> dict:
 
 def main():
     """Calculate real betting edge using market odds."""
+    today = date.today()
+    date_str = today.strftime("%Y-%m-%d")
+
     # Load predictions and market odds
-    predictions_path = Path("data/todays_game_predictions_2025-12-21.csv")
-    market_path = Path("market_odds_2025-12-21.csv")
+    predictions_path = Path(f"data/todays_game_predictions_{date_str}.csv")
+    market_path = Path(f"data/overtime_ncaab_odds_{date_str}.csv")
 
     if not predictions_path.exists():
         print(f"ERROR: Predictions file not found at {predictions_path}")
+        print("Run: uv run python analyze_todays_games.py")
         return
 
     if not market_path.exists():
         print(f"ERROR: Market odds file not found at {market_path}")
+        print("Run: uv run fetch-odds")
         return
 
     predictions = pd.read_csv(predictions_path)
     market = pd.read_csv(market_path)
 
     print("=" * 80)
-    print("REAL BETTING EDGE ANALYSIS - December 21, 2025")
-    print("Market Odds Source: ESPN/DraftKings")
+    print(f"REAL BETTING EDGE ANALYSIS - {today.strftime('%B %d, %Y')}")
+    print("Market Odds Source: overtime.ag")
     print("=" * 80)
 
     # Merge predictions with market odds
@@ -388,7 +394,7 @@ def main():
         )
 
     results_df = pd.DataFrame(results)
-    output_path = Path("data/betting_edge_analysis_2025-12-21.csv")
+    output_path = Path(f"data/betting_edge_analysis_{date_str}.csv")
     results_df.to_csv(output_path, index=False)
 
     print(f"\nDetailed analysis exported to: {output_path}")
