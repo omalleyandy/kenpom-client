@@ -126,6 +126,137 @@ class HCAScraper:
                 "KENPOM_EMAIL and KENPOM_PASSWORD required (set in .env or pass as args)"
             )
 
+    def _handle_cloudflare(self, page: Page) -> None:
+        """Handle Cloudflare verification challenge.
+
+        Waits for automatic verification or prompts user if stuck.
+        """
+        # Check for Cloudflare verification page
+        cloudflare_indicators = [
+            "text=Verifying you are human",
+            "text=Verify you are human",
+            "text=Checking your browser",
+            "text=needs to review the security",
+            "text=Just a moment",
+            "text=completing the action below",
+            "#challenge-running",
+            "#challenge-stage",
+            "iframe[src*='challenges.cloudflare.com']",
+            "iframe[src*='turnstile']",
+        ]
+
+        is_cloudflare = False
+        for selector in cloudflare_indicators:
+            try:
+                if page.locator(selector).is_visible(timeout=1000):
+                    is_cloudflare = True
+                    break
+            except Exception:
+                continue
+
+        if not is_cloudflare:
+            return
+
+        print("\n" + "=" * 60)
+        print("CLOUDFLARE VERIFICATION DETECTED")
+        print("=" * 60)
+        print("Waiting for automatic verification...")
+
+        # Wait up to 10 seconds for automatic verification
+        for i in range(10):
+            page.wait_for_timeout(1000)
+
+            # Check if a clickable checkbox appeared (Turnstile)
+            turnstile_selectors = [
+                "iframe[src*='challenges.cloudflare.com']",
+                "iframe[src*='turnstile']",
+                "text=completing the action below",
+            ]
+
+            checkbox_appeared = False
+            for selector in turnstile_selectors:
+                try:
+                    if page.locator(selector).is_visible(timeout=500):
+                        checkbox_appeared = True
+                        break
+                except Exception:
+                    continue
+
+            if checkbox_appeared and not self.headless:
+                print("\n" + "=" * 60)
+                print("CLOUDFLARE CHECKBOX DETECTED")
+                print("=" * 60)
+                print("Click the 'Verify you are human' checkbox in the browser.")
+                print("DO NOT close the browser!")
+                print("=" * 60)
+                input("\nPress ENTER after clicking the checkbox...")
+                page.wait_for_timeout(3000)
+
+                # Check if verification completed
+                still_verifying = False
+                for selector in cloudflare_indicators:
+                    try:
+                        if page.locator(selector).is_visible(timeout=1000):
+                            still_verifying = True
+                            break
+                    except Exception:
+                        continue
+
+                if not still_verifying:
+                    print("Cloudflare verification completed!")
+                    return
+                continue
+
+            # Check if verification completed
+            still_verifying = False
+            for selector in cloudflare_indicators:
+                try:
+                    if page.locator(selector).is_visible(timeout=500):
+                        still_verifying = True
+                        break
+                except Exception:
+                    continue
+
+            if not still_verifying:
+                print("Cloudflare verification completed!")
+                page.wait_for_timeout(2000)
+                return
+
+            if i == 5:
+                print("Still waiting...")
+
+        # If still stuck, try refreshing
+        print("Verification stuck, trying page refresh...")
+        page.reload(wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(5000)
+
+        # Check if refresh helped
+        still_verifying = False
+        for selector in cloudflare_indicators:
+            try:
+                if page.locator(selector).is_visible(timeout=1000):
+                    still_verifying = True
+                    break
+            except Exception:
+                continue
+
+        if not still_verifying:
+            print("Cloudflare verification completed after refresh!")
+            return
+
+        # If still stuck, prompt user
+        if not self.headless:
+            print("\n" + "=" * 60)
+            print("CLOUDFLARE VERIFICATION STUCK")
+            print("=" * 60)
+            print("The automatic verification seems stuck.")
+            print("Please complete any challenge in the browser window.")
+            print("If there's a checkbox, click it.")
+            print("DO NOT close the browser!")
+            print("=" * 60)
+            input("\nPress ENTER after the page loads...")
+            page.wait_for_timeout(2000)
+
     def login(self, page: Page) -> bool:
         """Log in to KenPom.
 
@@ -137,101 +268,244 @@ class HCAScraper:
         """
         try:
             print("Navigating to KenPom login page...")
-            page.goto("https://kenpom.com/", wait_until="networkidle")
+            page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(2000)
 
-            # Check if already logged in (look for logout link or user menu)
-            if page.locator("a:has-text('logout')").is_visible(timeout=1000):
-                print("Already logged in")
-                return True
+            # Handle Cloudflare verification if present
+            self._handle_cloudflare(page)
 
-            # Find and click login link
-            login_selectors = [
-                "a:has-text('login')",
-                "a[href*='login']",
-                "#login-link",
+            # Check if already logged in (look for logout link or subscriber content)
+            try:
+                if page.locator("a:has-text('Logout')").is_visible(timeout=2000):
+                    print("Already logged in")
+                    return True
+            except Exception:
+                pass
+
+            # Login form is on the main page (no separate login.php)
+            print("Looking for login form on main page...")
+
+            # Take screenshot for debugging
+            screenshots_dir = Path("data/screenshots")
+            screenshots_dir.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(screenshots_dir / "kenpom_login_page.png"))
+            print(f"Screenshot saved to {screenshots_dir / 'kenpom_login_page.png'}")
+
+            # Check page title/content to see if we're really on login page
+            page_title = page.title()
+            page_content = page.content()
+            print(f"Page title: {page_title}")
+
+            # If page still shows Cloudflare content, prompt user
+            if "just a moment" in page_content.lower() or "checking" in page_content.lower():
+                if not self.headless:
+                    print("\n" + "=" * 60)
+                    print("PAGE STILL LOADING / CLOUDFLARE ACTIVE")
+                    print("=" * 60)
+                    print("The page hasn't fully loaded yet.")
+                    print("Wait for the page to load completely, then press ENTER.")
+                    print("DO NOT close the browser!")
+                    print("=" * 60)
+                    input("\nPress ENTER when the login page is visible...")
+                    page.wait_for_timeout(2000)
+                    page.screenshot(path=str(screenshots_dir / "kenpom_after_wait.png"))
+
+            # Check for CAPTCHA/challenge (might appear before login form)
+            captcha_selectors = [
+                "iframe[src*='captcha']",
+                "iframe[src*='recaptcha']",
+                "iframe[src*='challenge']",
+                "#captcha",
+                ".g-recaptcha",
+                ".cf-turnstile",
+                "[class*='captcha']",
+                "[class*='challenge']",
+                "text=I'm not a robot",
             ]
 
-            login_clicked = False
-            for selector in login_selectors:
+            captcha_detected = False
+            for selector in captcha_selectors:
                 try:
-                    login_link = page.locator(selector).first
-                    if login_link.is_visible(timeout=1000):
-                        login_link.click()
-                        page.wait_for_timeout(1500)
-                        login_clicked = True
+                    if page.locator(selector).is_visible(timeout=500):
+                        captcha_detected = True
                         break
                 except Exception:
                     continue
 
-            if not login_clicked:
-                # Maybe we're on login page already
-                pass
+            if captcha_detected and not self.headless:
+                print("\n" + "=" * 60)
+                print("CAPTCHA DETECTED on login page!")
+                print("=" * 60)
+                print("Please complete the CAPTCHA in the browser window.")
+                print("DO NOT close the browser!")
+                print("=" * 60)
+                input("\nPress ENTER after completing the CAPTCHA...")
+                page.wait_for_timeout(2000)
+                page.screenshot(path=str(screenshots_dir / "kenpom_after_captcha.png"))
 
-            # Fill login form
+            # Try multiple selectors for email field
             email_selectors = [
                 'input[name="email"]',
                 'input[type="email"]',
-                'input[placeholder*="email"]',
-                'input[id="email"]',
+                'input[placeholder="E-mail"]',
+                'input#email',
+                'input[placeholder*="email" i]',
             ]
 
             email_field = None
             for selector in email_selectors:
                 try:
-                    field = page.locator(selector).first
-                    if field.is_visible(timeout=1000):
+                    field = page.locator(selector)
+                    if field.is_visible(timeout=2000):
                         email_field = field
+                        print(f"Found email field with selector: {selector}")
                         break
                 except Exception:
                     continue
 
             if not email_field:
-                print("ERROR: Could not find email field")
-                page.screenshot(path="data/screenshots/kenpom_login_failed.png")
+                print("Could not find email field. Taking screenshot...")
+                page.screenshot(path=str(screenshots_dir / "kenpom_login_failed.png"))
+                print(f"Screenshot saved to {screenshots_dir / 'kenpom_login_failed.png'}")
+
+                # Show what the page looks like
+                current_title = page.title()
+                print(f"Current page title: {current_title}")
+                print(f"Current URL: {page.url}")
+
+                if not self.headless:
+                    print("\n" + "=" * 60)
+                    print("LOGIN FORM NOT FOUND")
+                    print("=" * 60)
+                    print("The login form couldn't be detected automatically.")
+                    print("")
+                    print("Please do the following in the browser window:")
+                    print("1. If you see a Cloudflare challenge, complete it")
+                    print("2. Navigate to the login page if needed")
+                    print("3. Enter your email and password")
+                    print("4. Click Login")
+                    print("5. Wait until you see the KenPom ratings page")
+                    print("")
+                    print("DO NOT close the browser!")
+                    print("=" * 60)
+                    input("\nPress ENTER after you are logged in and see the main page...")
+
+                    # Give extra time for any page transitions
+                    page.wait_for_timeout(3000)
+
+                    # Take screenshot of current state
+                    try:
+                        page.screenshot(path=str(screenshots_dir / "kenpom_after_manual.png"))
+                        print(f"Screenshot saved to {screenshots_dir / 'kenpom_after_manual.png'}")
+                    except Exception:
+                        pass
+
+                    # Check if now logged in - try current page first
+                    try:
+                        if page.locator("a:has-text('Logout')").is_visible(timeout=3000):
+                            print("Manual login successful!")
+                            return True
+                    except Exception as e:
+                        print(f"Could not check for logout link: {e}")
+
+                    # Try navigating to main page
+                    try:
+                        page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
+                        page.wait_for_timeout(2000)
+                        if page.locator("a:has-text('Logout')").is_visible(timeout=3000):
+                            print("Login verified!")
+                            return True
+                    except Exception as e:
+                        print(f"Navigation check failed: {e}")
+
+                    # Last attempt - check if we can see subscriber content
+                    try:
+                        # If we can see the ratings table, we're probably logged in
+                        if page.locator("table").is_visible(timeout=2000):
+                            print("Found table content - assuming logged in")
+                            return True
+                    except Exception:
+                        pass
+
+                    print("Could not verify login status")
+
                 return False
 
             assert self.username is not None
             email_field.fill(self.username)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(300)
 
-            # Find password field
-            password_field = page.locator('input[type="password"]').first
+            # Find and fill password field
+            password_field = page.locator('input[name="password"], input[type="password"]').first
             assert self.password is not None
             password_field.fill(self.password)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(300)
 
-            # Submit login
-            submit_selectors = [
-                'button[type="submit"]',
-                'input[type="submit"]',
-                'button:has-text("Log In")',
-                'button:has-text("Login")',
-                'button:has-text("Sign In")',
-            ]
+            # Submit login form (button value is "Login!" with exclamation)
+            submit_button = page.locator('input[type="submit"][value="Login!"]')
+            if not submit_button.is_visible(timeout=2000):
+                # Try alternative submit button
+                submit_button = page.locator('input[type="submit"], button[type="submit"]').first
 
-            for selector in submit_selectors:
+            submit_button.click()
+            print("Submitted login form...")
+
+            # Wait for redirect after login
+            page.wait_for_timeout(3000)
+
+            # Check for CAPTCHA after form submission
+            for selector in captcha_selectors:
                 try:
-                    submit = page.locator(selector).first
-                    if submit.is_visible(timeout=1000):
-                        submit.click()
+                    if page.locator(selector).is_visible(timeout=500):
+                        captcha_detected = True
                         break
                 except Exception:
                     continue
 
-            # Wait for login to complete
-            page.wait_for_timeout(3000)
+            if captcha_detected:
+                if not self.headless:
+                    print("\n" + "=" * 60)
+                    print("CAPTCHA DETECTED!")
+                    print("=" * 60)
+                    print("IMPORTANT: Complete the CAPTCHA in the browser window.")
+                    print("DO NOT close the browser - leave it open!")
+                    print("After completing the CAPTCHA, come back here.")
+                    print("=" * 60)
+                    input("\nPress ENTER after completing the CAPTCHA...")
+                    print("Waiting for page to update...")
+                    page.wait_for_timeout(3000)
+                    print("Continuing...")
+                else:
+                    print("ERROR: CAPTCHA detected but running in headless mode")
+                    print("Run with: uv run fetch-hca   (without --headless)")
+                    print("Or: uv run kenpom hca --headed")
+                    return False
 
-            # Verify login success
-            if page.locator("a:has-text('logout')").is_visible(timeout=3000):
-                print("Login successful")
-                return True
-            else:
-                print("WARNING: Could not verify login success")
-                return True  # Proceed anyway
+            # Verify login success by checking for logout link
+            try:
+                if page.locator("a:has-text('Logout')").is_visible(timeout=3000):
+                    print("Login successful (found Logout link)")
+                    return True
+            except Exception:
+                pass
+
+            # Check for error message
+            error_msg = page.locator(".error, .alert-danger, .login-error")
+            try:
+                if error_msg.is_visible(timeout=1000):
+                    print(f"Login error: {error_msg.text_content()}")
+                    return False
+            except Exception:
+                pass
+
+            # If we're still on login page, might have failed
+            print("WARNING: May still be on login page, proceeding anyway...")
+            return True
 
         except Exception as e:
             print(f"Login failed: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def scrape_hca(self, page: Page, season: int = 2025) -> Optional[HCASnapshot]:
@@ -246,14 +520,68 @@ class HCAScraper:
         """
         try:
             print(f"Navigating to HCA page for season {season}...")
-            page.goto(f"https://kenpom.com/hca.php?y={season}", wait_until="networkidle")
-            page.wait_for_timeout(2000)
+
+            # Navigate via menu structure (more natural browsing behavior)
+            # First ensure we're on the main page
+            if "kenpom.com" not in page.url:
+                page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(2000)
+
+            # Try menu navigation first (Miscellany menu -> Home Court Ratings)
+            try:
+                print("Attempting menu navigation to HCA...")
+                # Hover over Miscellany menu to open dropdown
+                misc_menu = page.locator('a:has-text("Miscellany")')
+                if misc_menu.is_visible(timeout=3000):
+                    misc_menu.hover()
+                    page.wait_for_timeout(500)
+
+                    # Click Home Court Ratings link
+                    hca_link = page.locator('a:has-text("Home Court Ratings")')
+                    if hca_link.is_visible(timeout=2000):
+                        hca_link.click()
+                        page.wait_for_timeout(3000)
+                        print("Successfully navigated via Miscellany menu")
+                    else:
+                        raise Exception("Home Court Ratings link not visible in menu")
+                else:
+                    raise Exception("Miscellany menu not visible")
+            except Exception as e:
+                print(f"Menu navigation failed ({e}), using direct URL...")
+                page.goto(
+                    f"https://kenpom.com/hca.php?y={season}",
+                    wait_until="domcontentloaded",
+                    timeout=60000,
+                )
+                page.wait_for_timeout(3000)
 
             # Take screenshot for debugging
             screenshots_dir = Path("data/screenshots")
             screenshots_dir.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(screenshots_dir / "kenpom_hca_page.png"))
             print(f"Screenshot saved to {screenshots_dir / 'kenpom_hca_page.png'}")
+
+            # Scroll to load all teams (the table may be virtualized or lazy-loaded)
+            print("Scrolling to load all teams...")
+            prev_count = 0
+            for scroll_attempt in range(10):
+                # Scroll to bottom
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(500)
+
+                # Count current rows
+                current_count = page.evaluate("""
+                    () => document.querySelectorAll('table tr').length
+                """)
+
+                if current_count == prev_count and scroll_attempt > 2:
+                    print(f"All teams loaded ({current_count} rows)")
+                    break
+                prev_count = current_count
+
+            # Scroll back to top
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(500)
 
             # Extract HCA data from table using JavaScript
             hca_data = page.evaluate("""
@@ -264,72 +592,66 @@ class HCAScraper:
                     };
 
                     // Find the main data table
-                    const table = document.getElementById('ratings-table') ||
-                                  document.querySelector('table.sortable') ||
-                                  document.querySelector('table');
+                    const tables = document.querySelectorAll('table');
+                    console.log('Found', tables.length, 'tables');
+
+                    // Find the table with team data (look for one with team.php links)
+                    let table = null;
+                    for (const t of tables) {
+                        if (t.querySelector('a[href*="team.php"]')) {
+                            table = t;
+                            break;
+                        }
+                    }
+
+                    if (!table) {
+                        table = document.getElementById('ratings-table') ||
+                                document.querySelector('table.sortable') ||
+                                document.querySelector('table');
+                    }
 
                     if (!table) {
                         console.log('No table found');
                         return result;
                     }
 
-                    // Get header row to determine column indices
-                    const headerRow = table.querySelector('thead tr') ||
-                                      table.querySelector('tr:first-child');
-                    const headers = headerRow ? Array.from(headerRow.querySelectorAll('th, td'))
-                                                     .map(h => h.textContent.trim().toLowerCase()) : [];
-
-                    console.log('Headers found:', headers);
-
-                    // Find column indices
-                    const teamIdx = headers.findIndex(h => h.includes('team') || h === '');
-                    const confIdx = headers.findIndex(h => h.includes('conf'));
-                    const hcaIdx = headers.findIndex(h => h.includes('hca') || h.includes('home court'));
-                    const homeEmIdx = headers.findIndex(h => h.includes('home') && h.includes('em'));
-                    const awayEmIdx = headers.findIndex(h => h.includes('away') && h.includes('em'));
-
-                    console.log('Column indices:', {teamIdx, confIdx, hcaIdx, homeEmIdx, awayEmIdx});
-
-                    // Get all data rows
-                    const tbody = table.querySelector('tbody') || table;
-                    const rows = Array.from(tbody.querySelectorAll('tr'));
+                    // Get ALL rows from the table (including tbody)
+                    const allRows = table.querySelectorAll('tr');
+                    console.log('Total rows in table:', allRows.length);
 
                     let rank = 0;
-                    rows.forEach((row, idx) => {
-                        // Skip header rows
+                    allRows.forEach((row, idx) => {
+                        // Skip header rows (those with th elements)
                         if (row.querySelector('th')) return;
 
                         const cells = Array.from(row.querySelectorAll('td'));
-                        if (cells.length < 3) return;
+                        if (cells.length < 2) return;
 
-                        // Try to extract team name
-                        let teamName = '';
-                        let conf = '';
-
-                        // Look for team link
+                        // Look for team link - this is the most reliable indicator
                         const teamLink = row.querySelector('a[href*="team.php"]');
-                        if (teamLink) {
-                            teamName = teamLink.textContent.trim();
-                        } else if (cells[0]) {
-                            teamName = cells[0].textContent.trim();
-                        }
+                        if (!teamLink) return;
 
-                        // Skip if no team name
+                        const teamName = teamLink.textContent.trim();
                         if (!teamName) return;
 
-                        // Get conference
-                        if (confIdx >= 0 && cells[confIdx]) {
-                            conf = cells[confIdx].textContent.trim();
+                        // Get conference (usually in a cell with conf link or just text)
+                        let conf = '';
+                        const confLink = row.querySelector('a[href*="conf.php"]');
+                        if (confLink) {
+                            conf = confLink.textContent.trim();
                         }
 
-                        // Get HCA value (look for the numeric column)
+                        // Find the HCA value - it's typically a decimal number between 1.5 and 8
+                        // Look at all cells and find the one that looks like an HCA value
                         let hca = null;
                         for (let i = 0; i < cells.length; i++) {
                             const text = cells[i].textContent.trim();
-                            // HCA values are typically in the 2-7 range
+                            // Skip cells with links (team names, conferences)
+                            if (cells[i].querySelector('a')) continue;
+
                             const num = parseFloat(text);
-                            if (!isNaN(num) && num > 0 && num < 15 && i !== 0) {
-                                // This is likely the HCA value
+                            // HCA values are typically 2.0 - 6.0 range
+                            if (!isNaN(num) && num >= 1.5 && num <= 8.0) {
                                 hca = num;
                                 break;
                             }
@@ -458,8 +780,24 @@ class HCAScraper:
             HCASnapshot with all team HCA data, or None on failure
         """
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
-            context = browser.new_context()
+            # Launch with args to look more like a real browser (helps with Cloudflare)
+            browser = p.chromium.launch(
+                headless=self.headless,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                ],
+            )
+            # Use realistic browser context
+            context = browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1920, "height": 1080},
+                locale="en-US",
+            )
             page = context.new_page()
 
             try:
@@ -525,8 +863,32 @@ def get_team_hca(team_name: str, snapshot: Optional[HCASnapshot] = None) -> floa
 
 def main():
     """CLI entry point for scraping KenPom HCA data."""
-    scraper = HCAScraper(headless=True)
-    snapshot = scraper.fetch_hca_data(season=2025)
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Scrape Home Court Advantage data from KenPom",
+        prog="fetch-hca",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run browser in headless mode (CAPTCHA cannot be completed)",
+    )
+    parser.add_argument(
+        "--y",
+        type=int,
+        default=2025,
+        help="Season year (default: 2025)",
+    )
+    args = parser.parse_args()
+
+    # Default to headed mode so CAPTCHA can be completed
+    scraper = HCAScraper(headless=args.headless)
+    print(f"Running in {'headless' if args.headless else 'headed'} mode")
+    print("If CAPTCHA appears, complete it in the browser window")
+    print("-" * 50)
+
+    snapshot = scraper.fetch_hca_data(season=args.y)
 
     if snapshot:
         # Save to JSON
