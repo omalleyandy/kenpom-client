@@ -53,6 +53,16 @@ if %errorlevel% equ 0 (
         echo [%date% %time%] WARNING: Prediction generation failed
     )
 
+    REM Run calculate_real_edge.py for detailed betting edge analysis
+    echo [%date% %time%] Calculating betting edges with Kelly Criterion...
+    "%PYTHON_EXE%" calculate_real_edge.py
+
+    if %errorlevel% equ 0 (
+        echo [%date% %time%] SUCCESS: Betting edge analysis complete
+    ) else (
+        echo [%date% %time%] WARNING: Betting edge analysis failed
+    )
+
     REM Exit successfully - stop retrying
     echo [%date% %time%] Workflow completed successfully
     exit /b 0
