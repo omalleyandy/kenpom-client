@@ -282,13 +282,8 @@ class HCAScraper:
             except Exception:
                 pass
 
-            # Navigate directly to login page
-            print("Navigating to login page...")
-            page.goto("https://kenpom.com/login.php", wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(3000)
-
-            # Handle Cloudflare verification again if it appears
-            self._handle_cloudflare(page)
+            # Login form is on the main page (no separate login.php)
+            print("Looking for login form on main page...")
 
             # Take screenshot for debugging
             screenshots_dir = Path("data/screenshots")
@@ -486,11 +481,13 @@ class HCAScraper:
                     print("Or: uv run kenpom hca --headed")
                     return False
 
-            # Verify login success by checking URL or page content
-            current_url = page.url
-            if "login" not in current_url.lower():
-                print("Login successful (redirected away from login page)")
-                return True
+            # Verify login success by checking for logout link
+            try:
+                if page.locator("a:has-text('Logout')").is_visible(timeout=3000):
+                    print("Login successful (found Logout link)")
+                    return True
+            except Exception:
+                pass
 
             # Check for error message
             error_msg = page.locator(".error, .alert-danger, .login-error")
