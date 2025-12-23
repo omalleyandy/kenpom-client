@@ -25,13 +25,19 @@ class GameOdds:
 
     away_team: str
     home_team: str
-    market_spread: Optional[float]  # Home team perspective (neg = favored)
-    spread_odds: Optional[int]  # American odds for spread (usually -110)
+    # Spreads - both sides
+    away_spread: Optional[float]  # Away team spread (e.g., +7.5)
+    away_spread_odds: Optional[int]  # Away spread price (e.g., -110)
+    home_spread: Optional[float]  # Home team spread (e.g., -7.5)
+    home_spread_odds: Optional[int]  # Home spread price (e.g., -110)
+    # Moneylines
     home_ml: Optional[int]  # Home team moneyline
     away_ml: Optional[int]  # Away team moneyline
+    # Totals
     total: Optional[float]  # Over/Under total points
     over_odds: Optional[int]  # Odds for over
     under_odds: Optional[int]  # Odds for under
+    # Metadata
     game_time: Optional[str]  # Game start time
     sport: str = "NCAAB"  # NCAA Men's Basketball
 
@@ -335,10 +341,15 @@ class OvertimeScraper:
                         const game = {
                             away_team: awayTeam,
                             home_team: homeTeam,
-                            spread: homeSpread.value,
-                            spread_price: homeSpread.price,
+                            // Spreads - both sides
+                            away_spread: awaySpread.value,
+                            away_spread_price: awaySpread.price,
+                            home_spread: homeSpread.value,
+                            home_spread_price: homeSpread.price,
+                            // Moneylines
                             away_ml: awayML.value ? parseInt(awayML.value) : null,
                             home_ml: homeML.value ? parseInt(homeML.value) : null,
+                            // Totals
                             total: overTotal.value || underTotal.value,
                             over_price: overTotal.price,
                             under_price: underTotal.price,
@@ -475,10 +486,15 @@ class OvertimeScraper:
                                         games.push({
                                             away_team: gl.Team1ID,
                                             home_team: gl.Team2ID,
-                                            spread: gl.Spread2,
-                                            spread_price: gl.SpreadPrice2,
+                                            // Spreads - both sides
+                                            away_spread: gl.Spread1,
+                                            away_spread_price: gl.SpreadPrice1,
+                                            home_spread: gl.Spread2,
+                                            home_spread_price: gl.SpreadPrice2,
+                                            // Moneylines
                                             away_ml: gl.MoneyLine1,
                                             home_ml: gl.MoneyLine2,
+                                            // Totals
                                             total: gl.Total,
                                             over_price: gl.TotalPrice1,
                                             under_price: gl.TotalPrice2,
@@ -508,14 +524,23 @@ class OvertimeScraper:
                     odds = GameOdds(
                         away_team=game["away_team"],
                         home_team=game["home_team"],
-                        market_spread=float(game["spread"]) if game["spread"] else None,
-                        spread_odds=int(game["spread_price"]) if game["spread_price"] else None,
-                        home_ml=int(game["home_ml"]) if game["home_ml"] else None,
-                        away_ml=int(game["away_ml"]) if game["away_ml"] else None,
-                        total=float(game["total"]) if game["total"] else None,
-                        over_odds=int(game["over_price"]) if game["over_price"] else None,
-                        under_odds=int(game["under_price"]) if game["under_price"] else None,
-                        game_time=game["game_time"],
+                        # Spreads - both sides
+                        away_spread=float(game["away_spread"]) if game.get("away_spread") else None,
+                        away_spread_odds=int(game["away_spread_price"])
+                        if game.get("away_spread_price")
+                        else None,
+                        home_spread=float(game["home_spread"]) if game.get("home_spread") else None,
+                        home_spread_odds=int(game["home_spread_price"])
+                        if game.get("home_spread_price")
+                        else None,
+                        # Moneylines
+                        home_ml=int(game["home_ml"]) if game.get("home_ml") else None,
+                        away_ml=int(game["away_ml"]) if game.get("away_ml") else None,
+                        # Totals
+                        total=float(game["total"]) if game.get("total") else None,
+                        over_odds=int(game["over_price"]) if game.get("over_price") else None,
+                        under_odds=int(game["under_price"]) if game.get("under_price") else None,
+                        game_time=game.get("game_time"),
                     )
                     games.append(odds)
                     print(f"  {odds.away_team} @ {odds.home_team}")
@@ -536,9 +561,14 @@ class OvertimeScraper:
             include_extra: If True, also scrape "College Extra" section
 
         Returns:
-            DataFrame with columns: away_team, home_team, market_spread,
-            spread_odds, home_ml, away_ml, total, over_odds, under_odds,
-            game_time
+            DataFrame with columns:
+            - away_team, home_team: Team names
+            - away_spread, away_spread_odds: Away team spread and price
+            - home_spread, home_spread_odds: Home team spread and price
+            - away_ml, home_ml: Moneyline odds
+            - total, over_odds, under_odds: Total and prices
+            - game_time: Game start time
+            - sport: Sport identifier (NCAAB)
         """
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=self.headless)

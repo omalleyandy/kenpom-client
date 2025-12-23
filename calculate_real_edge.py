@@ -368,20 +368,33 @@ def main():
 
     # Determine which columns to use for market data
     # After merge, market_spread might be _pred (from predictions) or _mkt (from market)
-    def get_col(df: pd.DataFrame, base_name: str, prefer_suffix: str = "_mkt") -> str:
+    # Also handles new column names (home_spread) vs old (market_spread)
+    def get_col(
+        df: pd.DataFrame, base_name: str, prefer_suffix: str = "_mkt", alt_name: str | None = None
+    ) -> str:
         """Get the correct column name after merge."""
+        # Try base name first
         if base_name in df.columns:
             return base_name
-        elif f"{base_name}{prefer_suffix}" in df.columns:
+        # Try with suffix
+        if f"{base_name}{prefer_suffix}" in df.columns:
             return f"{base_name}{prefer_suffix}"
-        elif f"{base_name}_pred" in df.columns:
+        if f"{base_name}_pred" in df.columns:
             return f"{base_name}_pred"
-        else:
-            return base_name  # Will fail, but gives useful error
+        # Try alternate name (for column renames)
+        if alt_name:
+            if alt_name in df.columns:
+                return alt_name
+            if f"{alt_name}{prefer_suffix}" in df.columns:
+                return f"{alt_name}{prefer_suffix}"
+            if f"{alt_name}_pred" in df.columns:
+                return f"{alt_name}_pred"
+        return base_name  # Will fail, but gives useful error
 
     # Column mappings - use market file columns where available
-    spread_col = get_col(merged, "market_spread", "_mkt")
-    spread_odds_col = get_col(merged, "spread_odds", "_mkt")
+    # Handle both old (market_spread) and new (home_spread) column names
+    spread_col = get_col(merged, "market_spread", "_mkt", alt_name="home_spread")
+    spread_odds_col = get_col(merged, "spread_odds", "_mkt", alt_name="home_spread_odds")
     home_ml_col = get_col(merged, "home_ml", "_mkt")
     away_ml_col = get_col(merged, "away_ml", "_mkt")
 

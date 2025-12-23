@@ -232,7 +232,7 @@ def get_market_odds(odds_df: pd.DataFrame, away_team: str, home_team: str) -> di
         home_team: Home team name
 
     Returns:
-        Dictionary with market_spread, home_ml, away_ml, total, etc.
+        Dictionary with spread, moneyline, and total data for both teams.
     """
     if odds_df.empty:
         return {}
@@ -247,14 +247,32 @@ def get_market_odds(odds_df: pd.DataFrame, away_team: str, home_team: str) -> di
         return {}
 
     row = match.iloc[0]
+
+    # Get spreads - use new column names, fallback to old for compatibility
+    home_spread = row.get("home_spread") if "home_spread" in row else row.get("market_spread")
+    home_spread_odds = (
+        row.get("home_spread_odds") if "home_spread_odds" in row else row.get("spread_odds")
+    )
+    away_spread = row.get("away_spread")
+    away_spread_odds = row.get("away_spread_odds")
+
     return {
-        "market_spread": row.get("market_spread"),
-        "spread_odds": row.get("spread_odds"),
+        # Spreads - both sides
+        "away_spread": away_spread,
+        "away_spread_odds": away_spread_odds,
+        "home_spread": home_spread,
+        "home_spread_odds": home_spread_odds,
+        # Backward compatibility (market_spread = home_spread)
+        "market_spread": home_spread,
+        "spread_odds": home_spread_odds,
+        # Moneylines
         "home_ml": row.get("home_ml"),
         "away_ml": row.get("away_ml"),
+        # Totals
         "total": row.get("total"),
         "over_odds": row.get("over_odds"),
         "under_odds": row.get("under_odds"),
+        # Metadata
         "game_time": row.get("game_time"),
     }
 
