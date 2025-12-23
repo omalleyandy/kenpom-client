@@ -137,101 +137,73 @@ class HCAScraper:
         """
         try:
             print("Navigating to KenPom login page...")
-            page.goto("https://kenpom.com/", wait_until="networkidle")
+            page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(2000)
 
-            # Check if already logged in (look for logout link or user menu)
-            if page.locator("a:has-text('logout')").is_visible(timeout=1000):
-                print("Already logged in")
-                return True
-
-            # Find and click login link
-            login_selectors = [
-                "a:has-text('login')",
-                "a[href*='login']",
-                "#login-link",
-            ]
-
-            login_clicked = False
-            for selector in login_selectors:
-                try:
-                    login_link = page.locator(selector).first
-                    if login_link.is_visible(timeout=1000):
-                        login_link.click()
-                        page.wait_for_timeout(1500)
-                        login_clicked = True
-                        break
-                except Exception:
-                    continue
-
-            if not login_clicked:
-                # Maybe we're on login page already
+            # Check if already logged in (look for logout link or subscriber content)
+            try:
+                if page.locator("a:has-text('logout')").is_visible(timeout=2000):
+                    print("Already logged in")
+                    return True
+            except Exception:
                 pass
 
-            # Fill login form
-            email_selectors = [
-                'input[name="email"]',
-                'input[type="email"]',
-                'input[placeholder*="email"]',
-                'input[id="email"]',
-            ]
+            # Navigate directly to login page
+            print("Navigating to login page...")
+            page.goto("https://kenpom.com/login.php", wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(2000)
 
-            email_field = None
-            for selector in email_selectors:
-                try:
-                    field = page.locator(selector).first
-                    if field.is_visible(timeout=1000):
-                        email_field = field
-                        break
-                except Exception:
-                    continue
-
-            if not email_field:
-                print("ERROR: Could not find email field")
-                page.screenshot(path="data/screenshots/kenpom_login_failed.png")
+            # Fill login form - KenPom uses 'email' and 'password' fields
+            email_field = page.locator('input[name="email"]')
+            if not email_field.is_visible(timeout=5000):
+                print("ERROR: Could not find email field on login page")
+                screenshots_dir = Path("data/screenshots")
+                screenshots_dir.mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(screenshots_dir / "kenpom_login_failed.png"))
                 return False
 
             assert self.username is not None
             email_field.fill(self.username)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(300)
 
-            # Find password field
-            password_field = page.locator('input[type="password"]').first
+            # Find and fill password field
+            password_field = page.locator('input[name="password"]')
             assert self.password is not None
             password_field.fill(self.password)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(300)
 
-            # Submit login
-            submit_selectors = [
-                'button[type="submit"]',
-                'input[type="submit"]',
-                'button:has-text("Log In")',
-                'button:has-text("Login")',
-                'button:has-text("Sign In")',
-            ]
+            # Submit login form
+            submit_button = page.locator('input[type="submit"][value="Login"]')
+            if not submit_button.is_visible(timeout=2000):
+                # Try alternative submit button
+                submit_button = page.locator('button[type="submit"], input[type="submit"]').first
 
-            for selector in submit_selectors:
-                try:
-                    submit = page.locator(selector).first
-                    if submit.is_visible(timeout=1000):
-                        submit.click()
-                        break
-                except Exception:
-                    continue
+            submit_button.click()
+            print("Submitted login form...")
 
-            # Wait for login to complete
+            # Wait for redirect after login
             page.wait_for_timeout(3000)
 
-            # Verify login success
-            if page.locator("a:has-text('logout')").is_visible(timeout=3000):
-                print("Login successful")
+            # Verify login success by checking URL or page content
+            current_url = page.url
+            if "login" not in current_url.lower():
+                print("Login successful (redirected away from login page)")
                 return True
-            else:
-                print("WARNING: Could not verify login success")
-                return True  # Proceed anyway
+
+            # Check for error message
+            error_msg = page.locator(".error, .alert-danger, .login-error")
+            if error_msg.is_visible(timeout=1000):
+                print(f"Login error: {error_msg.text_content()}")
+                return False
+
+            # If we're still on login page, might have failed
+            print("WARNING: May still be on login page, proceeding anyway...")
+            return True
 
         except Exception as e:
             print(f"Login failed: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def scrape_hca(self, page: Page, season: int = 2025) -> Optional[HCASnapshot]:
@@ -246,8 +218,12 @@ class HCAScraper:
         """
         try:
             print(f"Navigating to HCA page for season {season}...")
-            page.goto(f"https://kenpom.com/hca.php?y={season}", wait_until="networkidle")
-            page.wait_for_timeout(2000)
+            page.goto(
+                f"https://kenpom.com/hca.php?y={season}",
+                wait_until="domcontentloaded",
+                timeout=60000,
+            )
+            page.wait_for_timeout(3000)
 
             # Take screenshot for debugging
             screenshots_dir = Path("data/screenshots")
