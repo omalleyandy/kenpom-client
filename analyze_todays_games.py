@@ -7,6 +7,8 @@ This script demonstrates how to use the snapshot enrichment system for:
 - Advanced basketball analytics
 
 Reads games from overtime.ag odds file and combines with KenPom predictions.
+Now integrates with KenPom fanmatch API for accurate predictions that handle
+neutral site games automatically.
 """
 
 from __future__ import annotations
@@ -24,6 +26,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 from kenpom_client.matchup import calculate_matchup_features
 from kenpom_client.prediction import predict_game
+from kenpom_client.client import KenPomClient
+from kenpom_client.config import Settings
 
 # Home court advantage in college basketball (points)
 HOME_COURT_ADVANTAGE = 3.5
@@ -114,6 +118,97 @@ def load_todays_odds(odds_date: Optional[date] = None) -> pd.DataFrame:
 
     print(f"WARNING: No odds file found. Tried: {[str(p) for p in odds_paths]}")
     return pd.DataFrame()
+
+
+def load_fanmatch_data(fanmatch_date: Optional[date] = None) -> dict[tuple[str, str], dict]:
+    """Load KenPom fanmatch predictions for a date.
+
+    Fanmatch predictions already account for neutral sites, home court,
+    and tempo adjustments - more accurate than our manual calculations.
+
+    Args:
+        fanmatch_date: Date to load predictions for (defaults to today)
+
+    Returns:
+        Dictionary mapping (away_team, home_team) to prediction dict with:
+        - kenpom_margin: KenPom's predicted margin (positive = home wins)
+        - kenpom_home_score: Predicted home score
+        - kenpom_away_score: Predicted away score
+        - kenpom_win_prob: Home team win probability
+        - kenpom_tempo: Predicted tempo
+    """
+    if fanmatch_date is None:
+        fanmatch_date = date.today()
+
+    date_str = fanmatch_date.strftime("%Y-%m-%d")
+
+    try:
+        settings = Settings.from_env()
+        client = KenPomClient(settings)
+        games = client.fanmatch(d=date_str)
+        print(f"Loaded {len(games)} games from KenPom fanmatch API")
+
+        fanmatch_dict: dict[tuple[str, str], dict] = {}
+        for game in games:
+            # Key by (visitor, home) to match our odds format
+            key = (game.Visitor, game.Home)
+            fanmatch_dict[key] = {
+                "kenpom_margin": game.HomePred - game.VisitorPred,
+                "kenpom_home_score": game.HomePred,
+                "kenpom_away_score": game.VisitorPred,
+                "kenpom_win_prob": game.HomeWP,
+                "kenpom_tempo": game.PredTempo,
+                "kenpom_home_rank": game.HomeRank,
+                "kenpom_away_rank": game.VisitorRank,
+            }
+        return fanmatch_dict
+
+    except Exception as e:
+        print(f"WARNING: Could not load fanmatch data: {e}")
+        print("Falling back to calculated predictions (may not handle neutral sites)")
+        return {}
+
+
+def find_fanmatch_game(
+    fanmatch_data: dict[tuple[str, str], dict],
+    away_team: str,
+    home_team: str,
+) -> Optional[dict]:
+    """Find fanmatch prediction for a game using fuzzy team matching.
+
+    Args:
+        fanmatch_data: Dictionary of fanmatch predictions keyed by (away, home)
+        away_team: Away team name from odds
+        home_team: Home team name from odds
+
+    Returns:
+        Fanmatch prediction dict if found, None otherwise
+    """
+    # Get normalized names to try
+    away_names = normalize_team_name(away_team)
+    home_names = normalize_team_name(home_team)
+
+    # Try all combinations of normalized names
+    for away_name in away_names:
+        for home_name in home_names:
+            # Try exact match
+            for (fm_away, fm_home), prediction in fanmatch_data.items():
+                if (
+                    fm_away.lower() == away_name.lower()
+                    and fm_home.lower() == home_name.lower()
+                ):
+                    return prediction
+                # Try partial match
+                if (
+                    away_name.lower() in fm_away.lower()
+                    or fm_away.lower() in away_name.lower()
+                ) and (
+                    home_name.lower() in fm_home.lower()
+                    or fm_home.lower() in home_name.lower()
+                ):
+                    return prediction
+
+    return None
 
 
 def get_games_from_odds(odds_df: pd.DataFrame) -> list[tuple[str, str]]:
@@ -269,6 +364,7 @@ def analyze_game(
     away_team: str,
     home_team: str,
     market_odds: Optional[dict] = None,
+    fanmatch_prediction: Optional[dict] = None,
 ) -> dict[str, float | str | None]:
     """Analyze a single game matchup with enhanced predictions.
 
@@ -277,6 +373,7 @@ def analyze_game(
         away_team: Away team name
         home_team: Home team name
         market_odds: Optional dictionary with market spread, ML, totals
+        fanmatch_prediction: Optional KenPom fanmatch data (handles neutral sites)
 
     Returns:
         Dictionary with game analysis including baseline and enhanced predictions
@@ -292,9 +389,14 @@ def analyze_game(
         }
 
     market_odds = market_odds or {}
+    fanmatch_prediction = fanmatch_prediction or {}
 
     # Get full prediction (baseline + enhanced)
     prediction = predict_game(away, home)
+
+    # Use KenPom fanmatch margin if available (handles neutral sites properly)
+    kenpom_margin = fanmatch_prediction.get("kenpom_margin")
+    kenpom_win_prob = fanmatch_prediction.get("kenpom_win_prob")
 
     # Calculate matchup features for CSV export
     matchup = calculate_matchup_features(away, home)
@@ -420,6 +522,38 @@ def analyze_game(
         if market_odds.get("market_spread") is not None
         and not pd.isna(market_odds.get("market_spread"))
         else None,
+        # ===== KENPOM FANMATCH (official predictions, handles neutral sites) =====
+        "kenpom_margin": kenpom_margin,
+        "kenpom_home_score": fanmatch_prediction.get("kenpom_home_score"),
+        "kenpom_away_score": fanmatch_prediction.get("kenpom_away_score"),
+        "kenpom_win_prob": kenpom_win_prob,
+        "kenpom_tempo": fanmatch_prediction.get("kenpom_tempo"),
+        "kenpom_home_rank": fanmatch_prediction.get("kenpom_home_rank"),
+        "kenpom_away_rank": fanmatch_prediction.get("kenpom_away_rank"),
+        # ===== KENPOM EDGE (uses official KenPom margin - most accurate) =====
+        "kenpom_edge": (
+            kenpom_margin + market_odds.get("market_spread", 0)
+            if kenpom_margin is not None
+            and market_odds.get("market_spread") is not None
+            and not pd.isna(market_odds.get("market_spread"))
+            else None
+        ),
+        "kenpom_edge_team": (
+            home["team"]
+            if kenpom_margin is not None
+            and market_odds.get("market_spread") is not None
+            and (kenpom_margin + market_odds.get("market_spread", 0)) > 0
+            else away["team"]
+        )
+        if kenpom_margin is not None
+        and market_odds.get("market_spread") is not None
+        and not pd.isna(market_odds.get("market_spread"))
+        else None,
+        "kenpom_edge_points": abs(kenpom_margin + market_odds.get("market_spread", 0))
+        if kenpom_margin is not None
+        and market_odds.get("market_spread") is not None
+        and not pd.isna(market_odds.get("market_spread"))
+        else None,
     }
 
 
@@ -482,7 +616,26 @@ def format_game_analysis(analysis: dict) -> str:
         # Edge calculation - using normalized values
         if analysis.get("edge_team") is not None:
             lines.append(
-                f"\n  *** EDGE: {analysis['edge_points']:.1f} pts on {analysis['edge_team']} ***"
+                f"\n  Model Edge: {analysis['edge_points']:.1f} pts on {analysis['edge_team']}"
+            )
+
+    # KenPom fanmatch prediction (official, handles neutral sites)
+    if analysis.get("kenpom_margin") is not None:
+        kenpom_margin = analysis["kenpom_margin"]
+        kenpom_winner = analysis["home_team"] if kenpom_margin > 0 else analysis["away_team"]
+        lines.append("\nKenPom Official:")
+        lines.append(
+            f"  Predicted: {analysis['kenpom_away_score']:.0f}-{analysis['kenpom_home_score']:.0f} "
+            f"({kenpom_winner} by {abs(kenpom_margin):.1f})"
+        )
+        if analysis.get("kenpom_win_prob"):
+            lines.append(f"  {analysis['home_team']} Win Prob: {analysis['kenpom_win_prob']:.1%}")
+
+        # KenPom edge (most accurate - handles neutral sites)
+        if analysis.get("kenpom_edge_team") is not None:
+            lines.append(
+                f"\n  *** KENPOM EDGE: {analysis['kenpom_edge_points']:.1f} pts on "
+                f"{analysis['kenpom_edge_team']} ***"
             )
 
     return "\n".join(lines)
@@ -528,17 +681,21 @@ def main():
     df = load_enriched_snapshot(snapshot_path)
     print(f"Loaded {len(df)} teams with {len(df.columns)} metrics\n")
 
+    # Load KenPom fanmatch predictions (handles neutral sites automatically)
+    fanmatch_data = load_fanmatch_data(today)
+
     # Analyze games
     print("=" * 80)
     print("TODAY'S NCAA MEN'S BASKETBALL GAME PREDICTIONS")
-    print("Using KenPom Enriched Snapshot + Overtime.ag Market Odds")
+    print("Using KenPom Enriched Snapshot + Fanmatch API + Overtime.ag Market Odds")
     print(f"Date: {date_str}")
     print("=" * 80)
 
     analyses = []
     for away, home in games:
         market_odds = get_market_odds(odds_df, away, home)
-        analysis = analyze_game(df, away, home, market_odds)
+        fanmatch_pred = find_fanmatch_game(fanmatch_data, away, home)
+        analysis = analyze_game(df, away, home, market_odds, fanmatch_pred)
         analyses.append(analysis)
         print(format_game_analysis(analysis))
 
@@ -569,14 +726,30 @@ def main():
             margin = abs(game["predicted_margin"])
             print(f"  {i}. {favorite} by {margin:.1f} points")
 
-        # Best edges (KenPom vs Market) - using normalized values
+        # Best KenPom edges (official predictions - most accurate, handles neutral sites)
+        games_with_kenpom_edge = [
+            a for a in valid_analyses if a.get("kenpom_edge_team") is not None
+        ]
+        if games_with_kenpom_edge:
+            sorted_by_kenpom_edge = sorted(
+                games_with_kenpom_edge, key=lambda x: x["kenpom_edge_points"], reverse=True
+            )
+            print("\nBest Spread Edges (KenPom Official vs Market):")
+            for i, game in enumerate(sorted_by_kenpom_edge[:5], 1):
+                print(
+                    f"  {i}. {game['kenpom_edge_team']} (+{game['kenpom_edge_points']:.1f} pts) - "
+                    f"{game['away_team']} @ {game['home_team']}"
+                )
+
+        # Model edges (for comparison - may not handle neutral sites)
         games_with_edge = [a for a in valid_analyses if a.get("edge_team") is not None]
         if games_with_edge:
             sorted_by_edge = sorted(games_with_edge, key=lambda x: x["edge_points"], reverse=True)
-            print("\nBest Spread Edges (KenPom vs Market):")
+            print("\nModel Edges (for comparison):")
             for i, game in enumerate(sorted_by_edge[:5], 1):
                 print(
-                    f"  {i}. {game['edge_team']} (+{game['edge_points']:.1f} pts) - {game['away_team']} @ {game['home_team']}"
+                    f"  {i}. {game['edge_team']} (+{game['edge_points']:.1f} pts) - "
+                    f"{game['away_team']} @ {game['home_team']}"
                 )
 
         # Most uncertain games (highest sigma)
@@ -586,6 +759,29 @@ def main():
             print(
                 f"  {i}. {game['away_team']} @ {game['home_team']} (sigma={game['avg_sigma']:.2f})"
             )
+
+    # Debug: Show unmatched teams and suggest corrections
+    failed_analyses = [a for a in analyses if "error" in a]
+    if failed_analyses:
+        print(f"\n\n{'=' * 80}")
+        print("UNMATCHED TEAMS - Add to TEAM_ALIASES in analyze_todays_games.py")
+        print(f"{'=' * 80}")
+        for a in failed_analyses:
+            error_msg = a.get("error", "")
+            # Extract team name from error message
+            if "Team not found:" in error_msg:
+                missing_team = error_msg.replace("Team not found:", "").strip()
+                # Search for similar names in KenPom
+                similar = df[df["team"].str.contains(missing_team[:4], case=False, na=False)]["team"].tolist()
+                if not similar:
+                    # Try first word
+                    first_word = missing_team.split()[0] if missing_team else ""
+                    similar = df[df["team"].str.contains(first_word, case=False, na=False)]["team"].tolist()
+                print(f"\n  '{missing_team}':")
+                if similar:
+                    print(f"    Possible matches: {similar[:5]}")
+                else:
+                    print("    No similar teams found")
 
     # Export to CSV
     results_df = pd.DataFrame(valid_analyses)
