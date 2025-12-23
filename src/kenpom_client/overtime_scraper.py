@@ -148,29 +148,41 @@ class OvertimeScraper:
             # Wait for page to fully load after login
             page.wait_for_load_state("networkidle", timeout=10000)
 
-            # Try multiple selectors for Basketball section
-            basketball_selectors = [
-                "#img_Basketball",
-                "img[id*='Basketball']",
-                "[id*='Basketball'][class*='sport']",
-                "text=Basketball",
-            ]
+            # Check if Basketball submenu is already expanded
+            # (avoid toggling it closed by clicking again)
+            submenu_visible = False
+            try:
+                submenu = page.locator("#sp_Basketball")
+                submenu_visible = submenu.is_visible(timeout=1000)
+                if submenu_visible:
+                    print("Basketball submenu already expanded")
+            except Exception:
+                pass
 
-            basketball_clicked = False
-            for selector in basketball_selectors:
-                try:
-                    basketball_icon = page.locator(selector).first
-                    if basketball_icon.is_visible(timeout=2000):
-                        basketball_icon.click()
-                        page.wait_for_timeout(1500)
-                        print(f"Clicked Basketball section (selector: {selector})")
-                        basketball_clicked = True
-                        break
-                except Exception:
-                    continue
+            # Only click Basketball if submenu is not visible
+            if not submenu_visible:
+                basketball_selectors = [
+                    "#img_Basketball",
+                    "img[id*='Basketball']",
+                    "[id*='Basketball'][class*='sport']",
+                    "text=Basketball",
+                ]
 
-            if not basketball_clicked:
-                print("WARNING: Could not click Basketball icon, trying direct navigation...")
+                basketball_clicked = False
+                for selector in basketball_selectors:
+                    try:
+                        basketball_icon = page.locator(selector).first
+                        if basketball_icon.is_visible(timeout=2000):
+                            basketball_icon.click()
+                            page.wait_for_timeout(1500)
+                            print(f"Clicked Basketball section (selector: {selector})")
+                            basketball_clicked = True
+                            break
+                    except Exception:
+                        continue
+
+                if not basketball_clicked:
+                    print("WARNING: Could not click Basketball icon, trying direct navigation...")
 
             # Wait for the Basketball submenu to expand
             page.wait_for_timeout(1000)
