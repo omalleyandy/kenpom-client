@@ -257,12 +257,40 @@ class HCAScraper:
         """
         try:
             print(f"Navigating to HCA page for season {season}...")
-            page.goto(
-                f"https://kenpom.com/hca.php?y={season}",
-                wait_until="domcontentloaded",
-                timeout=60000,
-            )
-            page.wait_for_timeout(3000)
+
+            # Navigate via menu structure (more natural browsing behavior)
+            # First ensure we're on the main page
+            if "kenpom.com" not in page.url:
+                page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(2000)
+
+            # Try menu navigation first (XPath: //*[@id="misc-menu"]/a then //*[@id="misc-menu"]/ul/li[5]/a)
+            try:
+                print("Attempting menu navigation to HCA...")
+                # Hover over Misc menu to open dropdown
+                misc_menu = page.locator('#misc-menu > a')
+                if misc_menu.is_visible(timeout=3000):
+                    misc_menu.hover()
+                    page.wait_for_timeout(500)
+
+                    # Click HCA link (5th item in Misc dropdown)
+                    hca_link = page.locator('#misc-menu > ul > li:nth-child(5) > a')
+                    if hca_link.is_visible(timeout=2000):
+                        hca_link.click()
+                        page.wait_for_timeout(3000)
+                        print("Successfully navigated via Misc menu")
+                    else:
+                        raise Exception("HCA link not visible in menu")
+                else:
+                    raise Exception("Misc menu not visible")
+            except Exception as e:
+                print(f"Menu navigation failed ({e}), using direct URL...")
+                page.goto(
+                    f"https://kenpom.com/hca.php?y={season}",
+                    wait_until="domcontentloaded",
+                    timeout=60000,
+                )
+                page.wait_for_timeout(3000)
 
             # Take screenshot for debugging
             screenshots_dir = Path("data/screenshots")
