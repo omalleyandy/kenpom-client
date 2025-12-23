@@ -1,14 +1,20 @@
 """Calculate real betting edge using actual market odds.
 
-This script compares your model predictions to real market lines from ESPN/DraftKings
+This script compares your model predictions to real market lines from overtime.ag
 to identify actual betting opportunities with quantified edge.
+
+Workflow:
+1. Run `uv run fetch-odds` to get today's market odds
+2. Run `uv run python analyze_todays_games.py` to generate predictions
+3. Run `uv run python calculate_real_edge.py` to calculate edges
 """
 
 from __future__ import annotations
 
 import math
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 
@@ -19,7 +25,16 @@ def normal_cdf(x: float) -> float:
 
 
 def cover_probability(predicted_margin: float, spread: float, avg_sigma: float) -> float:
-    """Calculate probability of covering a specific spread."""
+    """Calculate probability of covering a specific spread.
+
+    Args:
+        predicted_margin: Model's predicted margin (positive = home wins by X)
+        spread: Market spread from home perspective (negative = home favored)
+        avg_sigma: Standard deviation of game outcomes
+
+    Returns:
+        Probability that home team covers the spread
+    """
     z_score = (predicted_margin - spread) / avg_sigma
     return normal_cdf(z_score)
 
@@ -41,44 +56,70 @@ def american_to_implied_prob(american_odds: int) -> float:
 
 
 def calculate_ev(win_prob: float, american_odds: int) -> float:
-    """Calculate expected value of a bet."""
+    """Calculate expected value of a bet.
+
+    Args:
+        win_prob: Probability of winning (0-1)
+        american_odds: American odds format (+150, -110, etc.)
+
+    Returns:
+        Expected value as decimal (0.05 = 5% EV)
+    """
     decimal_odds = american_to_decimal(american_odds)
     return (win_prob * (decimal_odds - 1)) - (1 - win_prob)
 
 
 def kelly_criterion(win_prob: float, decimal_odds: float) -> float:
-    """Calculate optimal bet size using Kelly Criterion."""
+    """Calculate optimal bet size using Kelly Criterion.
+
+    Args:
+        win_prob: Probability of winning
+        decimal_odds: Decimal odds (2.0 = even money)
+
+    Returns:
+        Fraction of bankroll to bet (0.0-1.0)
+    """
     if decimal_odds <= 1:
         return 0.0
     kelly = (win_prob * decimal_odds - 1) / (decimal_odds - 1)
     return max(0.0, kelly)
 
 
-def analyze_spread_edge(model_row: pd.Series, market_row: pd.Series) -> dict:
-    """Analyze edge in point spread."""
-    model_margin = model_row["predicted_margin"]
-    market_spread = market_row["market_spread"]
-    avg_sigma = model_row["avg_sigma"]
+def analyze_spread_edge(
+    home_team: str,
+    away_team: str,
+    predicted_margin: float,
+    market_spread: float,
+    spread_odds: int,
+    avg_sigma: float,
+) -> dict:
+    """Analyze edge in point spread.
 
-    # Market spread is from home team perspective
-    # Negative = home favored, Positive = away favored
-    # Need to flip sign for comparison
-    market_spread_home = -market_spread
+    Args:
+        home_team: Home team name
+        away_team: Away team name
+        predicted_margin: Model's predicted margin (positive = home wins)
+        market_spread: Market spread (negative = home favored)
+        spread_odds: Odds on the spread (usually -110)
+        avg_sigma: Standard deviation of predictions
 
+    Returns:
+        Dictionary with spread edge analysis
+    """
     # Calculate edge (model vs market)
-    spread_edge = model_margin - market_spread_home
+    # If model says home -10 and market says home -7, edge = 3 on home
+    spread_edge = predicted_margin - market_spread
 
     # Cover probabilities
-    home_cover_prob = cover_probability(model_margin, market_spread_home, avg_sigma)
+    home_cover_prob = cover_probability(predicted_margin, market_spread, avg_sigma)
     away_cover_prob = 1 - home_cover_prob
 
     # Market implied probability from odds
-    market_odds = int(market_row["spread_odds"])
-    market_implied = american_to_implied_prob(market_odds)
+    market_implied = american_to_implied_prob(spread_odds)
 
     # Calculate EVs
-    home_ev = calculate_ev(home_cover_prob, market_odds)
-    away_ev = calculate_ev(away_cover_prob, market_odds)
+    home_ev = calculate_ev(home_cover_prob, spread_odds)
+    away_ev = calculate_ev(away_cover_prob, spread_odds)
 
     # Determine best bet
     if abs(spread_edge) < 1.0:
@@ -88,14 +129,14 @@ def analyze_spread_edge(model_row: pd.Series, market_row: pd.Series) -> dict:
         bet_prob = 0.5
     elif spread_edge > 0:
         # Home team undervalued by market
-        recommendation = f"{model_row['home_team']} {market_spread_home:+.1f}"
-        bet_team = model_row["home_team"]
+        recommendation = f"{home_team} {market_spread:+.1f}"
+        bet_team = home_team
         bet_ev = home_ev
         bet_prob = home_cover_prob
     else:
         # Away team undervalued by market
-        recommendation = f"{model_row['away_team']} {-market_spread_home:+.1f}"
-        bet_team = model_row["away_team"]
+        recommendation = f"{away_team} {-market_spread:+.1f}"
+        bet_team = away_team
         bet_ev = away_ev
         bet_prob = away_cover_prob
 
@@ -111,9 +152,9 @@ def analyze_spread_edge(model_row: pd.Series, market_row: pd.Series) -> dict:
         strength = "WEAK"
 
     return {
-        "game": f"{model_row['away_team']} @ {model_row['home_team']}",
-        "model_spread": f"{model_row['home_team']} {model_margin:+.1f}",
-        "market_spread": f"{model_row['home_team']} {market_spread_home:+.1f}",
+        "game": f"{away_team} @ {home_team}",
+        "model_spread": f"{home_team} {predicted_margin:+.1f}",
+        "market_spread_str": f"{home_team} {market_spread:+.1f}",
         "spread_edge": spread_edge,
         "home_cover_prob": home_cover_prob,
         "away_cover_prob": away_cover_prob,
@@ -124,55 +165,76 @@ def analyze_spread_edge(model_row: pd.Series, market_row: pd.Series) -> dict:
         "bet_probability": bet_prob,
         "strength": strength,
         "avg_sigma": avg_sigma,
+        "spread_odds": spread_odds,
     }
 
 
-def analyze_moneyline_edge(model_row: pd.Series, market_row: pd.Series) -> dict:
-    """Analyze edge in moneyline."""
-    model_home_prob = model_row["home_win_prob"]
-    model_away_prob = model_row["away_win_prob"]
+def analyze_moneyline_edge(
+    home_team: str,
+    away_team: str,
+    home_win_prob: float,
+    away_win_prob: float,
+    home_ml: Optional[int],
+    away_ml: Optional[int],
+) -> dict:
+    """Analyze edge in moneyline.
 
-    # Parse market odds
-    home_ml_str = str(market_row["home_ml"])
-    away_ml_str = str(market_row["away_ml"])
+    Args:
+        home_team: Home team name
+        away_team: Away team name
+        home_win_prob: Model's probability home team wins
+        away_win_prob: Model's probability away team wins
+        home_ml: Home team moneyline odds
+        away_ml: Away team moneyline odds
 
-    # Handle OFF (odds not offered)
-    if home_ml_str == "OFF" or away_ml_str == "OFF":
+    Returns:
+        Dictionary with moneyline edge analysis
+    """
+    # Handle missing/invalid odds
+    if home_ml is None or away_ml is None:
         return {
-            "game": f"{model_row['away_team']} @ {model_row['home_team']}",
+            "game": f"{away_team} @ {home_team}",
             "recommendation": "MONEYLINE NOT OFFERED",
             "expected_value": 0.0,
             "strength": "N/A",
         }
 
-    home_ml = int(home_ml_str)
-    away_ml = int(away_ml_str)
+    try:
+        home_ml = int(home_ml)
+        away_ml = int(away_ml)
+    except (ValueError, TypeError):
+        return {
+            "game": f"{away_team} @ {home_team}",
+            "recommendation": "MONEYLINE NOT OFFERED",
+            "expected_value": 0.0,
+            "strength": "N/A",
+        }
 
     # Market implied probabilities
     market_home_prob = american_to_implied_prob(home_ml)
     market_away_prob = american_to_implied_prob(away_ml)
 
     # Edge (probability difference)
-    home_edge = model_home_prob - market_home_prob
-    away_edge = model_away_prob - market_away_prob
+    home_edge = home_win_prob - market_home_prob
+    away_edge = away_win_prob - market_away_prob
 
     # Expected values
-    home_ev = calculate_ev(model_home_prob, home_ml)
-    away_ev = calculate_ev(model_away_prob, away_ml)
+    home_ev = calculate_ev(home_win_prob, home_ml)
+    away_ev = calculate_ev(away_win_prob, away_ml)
 
     # Determine best bet
     if home_ev > away_ev and home_ev > 0:
-        best_bet = model_row["home_team"]
+        best_bet = home_team
         best_odds = home_ml
         best_ev = home_ev
         prob_edge = home_edge
-        bet_prob = model_home_prob
+        bet_prob = home_win_prob
     elif away_ev > 0:
-        best_bet = model_row["away_team"]
+        best_bet = away_team
         best_odds = away_ml
         best_ev = away_ev
         prob_edge = away_edge
-        bet_prob = model_away_prob
+        bet_prob = away_win_prob
     else:
         best_bet = "PASS"
         best_odds = 0
@@ -180,7 +242,7 @@ def analyze_moneyline_edge(model_row: pd.Series, market_row: pd.Series) -> dict:
         prob_edge = max(home_edge, away_edge)
         bet_prob = 0.5
 
-    # Strength
+    # Strength classification
     abs_edge = abs(prob_edge)
     if abs_edge >= 0.10:
         strength = "VERY STRONG"
@@ -192,8 +254,8 @@ def analyze_moneyline_edge(model_row: pd.Series, market_row: pd.Series) -> dict:
         strength = "WEAK"
 
     return {
-        "game": f"{model_row['away_team']} @ {model_row['home_team']}",
-        "model_probs": f"Home {model_home_prob:.1%} / Away {model_away_prob:.1%}",
+        "game": f"{away_team} @ {home_team}",
+        "model_probs": f"Home {home_win_prob:.1%} / Away {away_win_prob:.1%}",
         "market_probs": f"Home {market_home_prob:.1%} / Away {market_away_prob:.1%}",
         "home_edge": home_edge,
         "away_edge": away_edge,
@@ -234,9 +296,40 @@ def main():
     print("=" * 80)
 
     # Merge predictions with market odds
-    merged = predictions.merge(market, on=["away_team", "home_team"], how="inner")
+    # Use suffixes to handle overlapping column names
+    merged = predictions.merge(
+        market,
+        on=["away_team", "home_team"],
+        how="inner",
+        suffixes=("_pred", "_mkt"),
+    )
 
     print(f"\n{len(merged)} games with both model predictions and market odds\n")
+
+    if len(merged) == 0:
+        print("No games matched. Check that team names match between files.")
+        print(f"\nPredictions teams: {predictions[['away_team', 'home_team']].head()}")
+        print(f"\nMarket teams: {market[['away_team', 'home_team']].head()}")
+        return
+
+    # Determine which columns to use for market data
+    # After merge, market_spread might be _pred (from predictions) or _mkt (from market)
+    def get_col(df: pd.DataFrame, base_name: str, prefer_suffix: str = "_mkt") -> str:
+        """Get the correct column name after merge."""
+        if base_name in df.columns:
+            return base_name
+        elif f"{base_name}{prefer_suffix}" in df.columns:
+            return f"{base_name}{prefer_suffix}"
+        elif f"{base_name}_pred" in df.columns:
+            return f"{base_name}_pred"
+        else:
+            return base_name  # Will fail, but gives useful error
+
+    # Column mappings - use market file columns where available
+    spread_col = get_col(merged, "market_spread", "_mkt")
+    spread_odds_col = get_col(merged, "spread_odds", "_mkt")
+    home_ml_col = get_col(merged, "home_ml", "_mkt")
+    away_ml_col = get_col(merged, "away_ml", "_mkt")
 
     # =========================================================================
     # POINT SPREAD ANALYSIS
@@ -248,7 +341,22 @@ def main():
     spread_opportunities = []
 
     for _, row in merged.iterrows():
-        analysis = analyze_spread_edge(row, row)
+        # Get values, handling potential NaN
+        market_spread = row.get(spread_col)
+        spread_odds = row.get(spread_odds_col, -110)
+
+        if pd.isna(market_spread) or pd.isna(spread_odds):
+            continue
+
+        analysis = analyze_spread_edge(
+            home_team=row["home_team"],
+            away_team=row["away_team"],
+            predicted_margin=row["predicted_margin"],
+            market_spread=float(market_spread),
+            spread_odds=int(spread_odds),
+            avg_sigma=row["avg_sigma"],
+        )
+
         if analysis["strength"] in ["VERY STRONG", "STRONG", "MODERATE"]:
             spread_opportunities.append(analysis)
 
@@ -260,7 +368,7 @@ def main():
     for opp in spread_opportunities:
         print(f"Game: {opp['game']}")
         print(f"  Model: {opp['model_spread']}")
-        print(f"  Market: {opp['market_spread']}")
+        print(f"  Market: {opp['market_spread_str']}")
         print(f"  Edge: {opp['spread_edge']:+.1f} points [{opp['strength']}]")
         print(f"  Cover Probability: {opp['bet_probability']:.1%}")
         print(f"  Expected Value: {opp['expected_value']:+.1%}")
@@ -268,8 +376,7 @@ def main():
 
         # Kelly Criterion bet sizing
         if opp["recommendation"] != "PASS":
-            market_odds = int(row["spread_odds"])
-            decimal_odds = american_to_decimal(market_odds)
+            decimal_odds = american_to_decimal(opp["spread_odds"])
             kelly = kelly_criterion(opp["bet_probability"], decimal_odds)
             print(f"  Kelly Criterion: {kelly:.2%} of bankroll (use 1/4 Kelly = {kelly / 4:.2%})")
         print()
@@ -284,7 +391,18 @@ def main():
     ml_opportunities = []
 
     for _, row in merged.iterrows():
-        analysis = analyze_moneyline_edge(row, row)
+        home_ml = row.get(home_ml_col)
+        away_ml = row.get(away_ml_col)
+
+        analysis = analyze_moneyline_edge(
+            home_team=row["home_team"],
+            away_team=row["away_team"],
+            home_win_prob=row["home_win_prob"],
+            away_win_prob=row["away_win_prob"],
+            home_ml=home_ml if not pd.isna(home_ml) else None,
+            away_ml=away_ml if not pd.isna(away_ml) else None,
+        )
+
         if analysis.get("strength") in ["VERY STRONG", "STRONG", "MODERATE"]:
             ml_opportunities.append(analysis)
 
@@ -335,7 +453,7 @@ def main():
 
     # Add moneylines
     for opp in ml_opportunities:
-        if opp.get("best_bet") != "PASS" and opp.get("best_bet") != "MONEYLINE NOT OFFERED":
+        if opp.get("best_bet") not in ["PASS", "MONEYLINE NOT OFFERED", None]:
             all_opportunities.append(
                 {
                     "type": "MONEYLINE",
@@ -369,23 +487,46 @@ def main():
     # Create detailed results DataFrame
     results = []
     for _, row in merged.iterrows():
-        spread_analysis = analyze_spread_edge(row, row)
-        ml_analysis = analyze_moneyline_edge(row, row)
+        market_spread = row.get(spread_col)
+        spread_odds = row.get(spread_odds_col, -110)
+        home_ml = row.get(home_ml_col)
+        away_ml = row.get(away_ml_col)
+
+        if pd.isna(market_spread):
+            continue
+
+        spread_analysis = analyze_spread_edge(
+            home_team=row["home_team"],
+            away_team=row["away_team"],
+            predicted_margin=row["predicted_margin"],
+            market_spread=float(market_spread),
+            spread_odds=int(spread_odds) if not pd.isna(spread_odds) else -110,
+            avg_sigma=row["avg_sigma"],
+        )
+
+        ml_analysis = analyze_moneyline_edge(
+            home_team=row["home_team"],
+            away_team=row["away_team"],
+            home_win_prob=row["home_win_prob"],
+            away_win_prob=row["away_win_prob"],
+            home_ml=home_ml if not pd.isna(home_ml) else None,
+            away_ml=away_ml if not pd.isna(away_ml) else None,
+        )
 
         results.append(
             {
                 "away_team": row["away_team"],
                 "home_team": row["home_team"],
                 "model_margin": row["predicted_margin"],
-                "market_spread": -row["market_spread"],
+                "market_spread": market_spread,
                 "spread_edge": spread_analysis["spread_edge"],
                 "spread_ev": spread_analysis["expected_value"],
                 "spread_recommendation": spread_analysis["recommendation"],
                 "spread_strength": spread_analysis["strength"],
                 "model_home_prob": row["home_win_prob"],
                 "model_away_prob": row["away_win_prob"],
-                "market_home_ml": row["home_ml"],
-                "market_away_ml": row["away_ml"],
+                "market_home_ml": home_ml,
+                "market_away_ml": away_ml,
                 "ml_recommendation": ml_analysis.get("best_bet", "N/A"),
                 "ml_ev": ml_analysis.get("expected_value", 0.0),
                 "ml_strength": ml_analysis.get("strength", "N/A"),
@@ -395,9 +536,18 @@ def main():
 
     results_df = pd.DataFrame(results)
     output_path = Path(f"data/betting_edge_analysis_{date_str}.csv")
-    results_df.to_csv(output_path, index=False)
 
-    print(f"\nDetailed analysis exported to: {output_path}")
+    # Handle locked file gracefully
+    try:
+        results_df.to_csv(output_path, index=False)
+        print(f"\nDetailed analysis exported to: {output_path}")
+    except PermissionError:
+        timestamp = datetime.now().strftime("%H%M%S")
+        backup_path = Path(f"data/betting_edge_analysis_{date_str}_{timestamp}.csv")
+        results_df.to_csv(backup_path, index=False)
+        print(f"\nWARNING: Could not write to {output_path} (file locked)")
+        print(f"Detailed analysis exported to backup: {backup_path}")
+
     print(f"Total opportunities: {len(all_opportunities)}")
     print(
         f"STRONG+ spreads: {len([o for o in spread_opportunities if o['strength'] in ['STRONG', 'VERY STRONG']])}"
