@@ -208,14 +208,19 @@ class HCAScraper:
                 if not self.headless:
                     print("\n" + "=" * 60)
                     print("CAPTCHA DETECTED!")
-                    print("Please complete it in the browser window.")
                     print("=" * 60)
-                    input("Press ENTER after completing the CAPTCHA...")
+                    print("IMPORTANT: Complete the CAPTCHA in the browser window.")
+                    print("DO NOT close the browser - leave it open!")
+                    print("After completing the CAPTCHA, come back here.")
+                    print("=" * 60)
+                    input("\nPress ENTER after completing the CAPTCHA...")
+                    print("Waiting for page to update...")
+                    page.wait_for_timeout(3000)
                     print("Continuing...")
-                    page.wait_for_timeout(2000)
                 else:
                     print("ERROR: CAPTCHA detected but running in headless mode")
-                    print("Try running with --headed flag to complete CAPTCHA manually")
+                    print("Run with: uv run fetch-hca   (without --headless)")
+                    print("Or: uv run kenpom hca --headed")
                     return False
 
             # Verify login success by checking URL or page content
@@ -535,8 +540,32 @@ def get_team_hca(team_name: str, snapshot: Optional[HCASnapshot] = None) -> floa
 
 def main():
     """CLI entry point for scraping KenPom HCA data."""
-    scraper = HCAScraper(headless=True)
-    snapshot = scraper.fetch_hca_data(season=2025)
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Scrape Home Court Advantage data from KenPom",
+        prog="fetch-hca",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run browser in headless mode (CAPTCHA cannot be completed)",
+    )
+    parser.add_argument(
+        "--y",
+        type=int,
+        default=2025,
+        help="Season year (default: 2025)",
+    )
+    args = parser.parse_args()
+
+    # Default to headed mode so CAPTCHA can be completed
+    scraper = HCAScraper(headless=args.headless)
+    print(f"Running in {'headless' if args.headless else 'headed'} mode")
+    print("If CAPTCHA appears, complete it in the browser window")
+    print("-" * 50)
+
+    snapshot = scraper.fetch_hca_data(season=args.y)
 
     if snapshot:
         # Save to JSON
