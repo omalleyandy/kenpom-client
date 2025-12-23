@@ -12,11 +12,19 @@ Workflow:
 from __future__ import annotations
 
 import math
+import sys
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+from kenpom_client.validation import (
+    PipelineValidator,
+    RunHistoryLogger,
+    create_run_stats,
+)
 
 
 def normal_cdf(x: float) -> float:
@@ -285,6 +293,11 @@ def main():
     today = date.today()
     date_str = today.strftime("%Y-%m-%d")
 
+    # Initialize validation and logging
+    validator = PipelineValidator()
+    history_logger = RunHistoryLogger()
+    run_stats = create_run_stats(stage="edge_analysis", run_date=today)
+
     # Load predictions and market odds
     predictions_path = Path(f"data/todays_game_predictions_{date_str}.csv")
     market_path = Path(f"data/overtime_ncaab_odds_{date_str}.csv")
@@ -292,15 +305,44 @@ def main():
     if not predictions_path.exists():
         print(f"ERROR: Predictions file not found at {predictions_path}")
         print("Run: uv run python analyze_todays_games.py")
+        run_stats.odds_issues.append("Predictions file not found")
+        history_logger.log_run(run_stats)
         return
 
     if not market_path.exists():
         print(f"ERROR: Market odds file not found at {market_path}")
         print("Run: uv run fetch-odds")
+        run_stats.odds_issues.append("Market odds file not found")
+        history_logger.log_run(run_stats)
         return
 
     predictions = pd.read_csv(predictions_path)
     market = pd.read_csv(market_path)
+
+    # Validate input files
+    print("=" * 60)
+    print("VALIDATING INPUT FILES")
+    print("=" * 60)
+
+    odds_validation = validator.validate_odds(market)
+    if not odds_validation.passed:
+        print("\nMarket odds validation issues:")
+        for issue in odds_validation.issues:
+            print(f"  ERROR: {issue}")
+    if odds_validation.warnings:
+        for warning in odds_validation.warnings[:3]:
+            print(f"  WARNING: {warning}")
+    if odds_validation.passed:
+        print("  Market odds validation passed")
+
+    pred_validation = validator.validate_predictions(predictions)
+    if not pred_validation.passed:
+        print("\nPredictions validation issues:")
+        for issue in pred_validation.issues:
+            print(f"  ERROR: {issue}")
+    if pred_validation.passed:
+        print("  Predictions validation passed")
+    print()
 
     print("=" * 80)
     print(f"REAL BETTING EDGE ANALYSIS - {today.strftime('%B %d, %Y')}")
@@ -560,6 +602,14 @@ def main():
         print(f"\nWARNING: Could not write to {output_path} (file locked)")
         print(f"Detailed analysis exported to backup: {backup_path}")
 
+    # Update run stats
+    run_stats.games_scraped = len(merged)
+    run_stats.spread_opportunities = len(spread_opportunities)
+    run_stats.ml_opportunities = len(ml_opportunities)
+    run_stats.strong_opportunities = len(
+        [o for o in spread_opportunities if o["strength"] in ["STRONG", "VERY STRONG"]]
+    ) + len([o for o in ml_opportunities if o.get("strength") in ["STRONG", "VERY STRONG"]])
+
     print(f"Total opportunities: {len(all_opportunities)}")
     print(
         f"STRONG+ spreads: {len([o for o in spread_opportunities if o['strength'] in ['STRONG', 'VERY STRONG']])}"
@@ -567,6 +617,33 @@ def main():
     print(
         f"STRONG+ moneylines: {len([o for o in ml_opportunities if o.get('strength') in ['STRONG', 'VERY STRONG']])}"
     )
+
+    # Validate edge analysis output
+    print("\n" + "=" * 60)
+    print("EDGE ANALYSIS VALIDATION")
+    print("=" * 60)
+    edge_validation = validator.validate_edge_analysis(results_df)
+    if not edge_validation.passed:
+        print("  VALIDATION FAILED:")
+        for issue in edge_validation.issues:
+            print(f"    ERROR: {issue}")
+    if edge_validation.warnings:
+        for warning in edge_validation.warnings:
+            print(f"    WARNING: {warning}")
+    if edge_validation.passed and not edge_validation.warnings:
+        print("  All edge analysis validation checks passed")
+
+    # Log run statistics
+    history_logger.log_run(run_stats)
+    print("\n" + "=" * 60)
+    print("RUN STATISTICS LOGGED")
+    print("=" * 60)
+    print(f"  Date: {run_stats.run_date}")
+    print(f"  Games analyzed: {run_stats.games_scraped}")
+    print(f"  Spread opportunities: {run_stats.spread_opportunities}")
+    print(f"  ML opportunities: {run_stats.ml_opportunities}")
+    print(f"  Strong+ opportunities: {run_stats.strong_opportunities}")
+    print(f"\n  History saved to: {history_logger.history_file}")
 
     print("\n" + "=" * 80)
     print("BETTING GUIDELINES")
