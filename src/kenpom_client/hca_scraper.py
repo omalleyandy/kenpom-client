@@ -126,6 +126,73 @@ class HCAScraper:
                 "KENPOM_EMAIL and KENPOM_PASSWORD required (set in .env or pass as args)"
             )
 
+    def _handle_cloudflare(self, page: Page) -> None:
+        """Handle Cloudflare verification challenge.
+
+        Waits for automatic verification or prompts user if stuck.
+        """
+        # Check for Cloudflare verification page
+        cloudflare_indicators = [
+            "text=Verifying you are human",
+            "text=Checking your browser",
+            "text=needs to review the security",
+            "text=Just a moment",
+            "#challenge-running",
+            "#challenge-stage",
+        ]
+
+        is_cloudflare = False
+        for selector in cloudflare_indicators:
+            try:
+                if page.locator(selector).is_visible(timeout=1000):
+                    is_cloudflare = True
+                    break
+            except Exception:
+                continue
+
+        if not is_cloudflare:
+            return
+
+        print("\n" + "=" * 60)
+        print("CLOUDFLARE VERIFICATION DETECTED")
+        print("=" * 60)
+        print("Waiting for automatic verification...")
+
+        # Wait up to 15 seconds for automatic verification
+        for i in range(15):
+            page.wait_for_timeout(1000)
+
+            # Check if verification completed
+            still_verifying = False
+            for selector in cloudflare_indicators:
+                try:
+                    if page.locator(selector).is_visible(timeout=500):
+                        still_verifying = True
+                        break
+                except Exception:
+                    continue
+
+            if not still_verifying:
+                print("Cloudflare verification completed!")
+                page.wait_for_timeout(2000)
+                return
+
+            if i == 7:
+                print("Still waiting...")
+
+        # If still stuck, prompt user
+        if not self.headless:
+            print("\n" + "=" * 60)
+            print("CLOUDFLARE VERIFICATION STUCK")
+            print("=" * 60)
+            print("The automatic verification seems stuck.")
+            print("Please complete any challenge in the browser window.")
+            print("If there's a checkbox, click it.")
+            print("DO NOT close the browser!")
+            print("=" * 60)
+            input("\nPress ENTER after the page loads...")
+            page.wait_for_timeout(2000)
+
     def login(self, page: Page) -> bool:
         """Log in to KenPom.
 
@@ -140,6 +207,9 @@ class HCAScraper:
             page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(2000)
 
+            # Handle Cloudflare verification if present
+            self._handle_cloudflare(page)
+
             # Check if already logged in (look for logout link or subscriber content)
             try:
                 if page.locator("a:has-text('logout')").is_visible(timeout=2000):
@@ -153,13 +223,16 @@ class HCAScraper:
             page.goto("https://kenpom.com/login.php", wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(3000)
 
+            # Handle Cloudflare verification again if it appears
+            self._handle_cloudflare(page)
+
             # Take screenshot for debugging
             screenshots_dir = Path("data/screenshots")
             screenshots_dir.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(screenshots_dir / "kenpom_login_page.png"))
             print(f"Screenshot saved to {screenshots_dir / 'kenpom_login_page.png'}")
 
-            # Check for CAPTCHA first (might appear before login form)
+            # Check for CAPTCHA/challenge (might appear before login form)
             captcha_selectors = [
                 "iframe[src*='captcha']",
                 "iframe[src*='recaptcha']",
@@ -169,9 +242,7 @@ class HCAScraper:
                 ".cf-turnstile",
                 "[class*='captcha']",
                 "[class*='challenge']",
-                "text=verify you are human",
                 "text=I'm not a robot",
-                "text=Verify you are human",
             ]
 
             captcha_detected = False
