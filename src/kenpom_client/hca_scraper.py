@@ -276,7 +276,7 @@ class HCAScraper:
 
             # Check if already logged in (look for logout link or subscriber content)
             try:
-                if page.locator("a:has-text('logout')").is_visible(timeout=2000):
+                if page.locator("a:has-text('Logout')").is_visible(timeout=2000):
                     print("Already logged in")
                     return True
             except Exception:
@@ -352,9 +352,9 @@ class HCAScraper:
             email_selectors = [
                 'input[name="email"]',
                 'input[type="email"]',
+                'input[placeholder="E-mail"]',
                 'input#email',
                 'input[placeholder*="email" i]',
-                'input[placeholder*="Email" i]',
             ]
 
             email_field = None
@@ -407,7 +407,7 @@ class HCAScraper:
 
                     # Check if now logged in - try current page first
                     try:
-                        if page.locator("a:has-text('logout')").is_visible(timeout=3000):
+                        if page.locator("a:has-text('Logout')").is_visible(timeout=3000):
                             print("Manual login successful!")
                             return True
                     except Exception as e:
@@ -417,7 +417,7 @@ class HCAScraper:
                     try:
                         page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
                         page.wait_for_timeout(2000)
-                        if page.locator("a:has-text('logout')").is_visible(timeout=3000):
+                        if page.locator("a:has-text('Logout')").is_visible(timeout=3000):
                             print("Login verified!")
                             return True
                     except Exception as e:
@@ -446,11 +446,11 @@ class HCAScraper:
             password_field.fill(self.password)
             page.wait_for_timeout(300)
 
-            # Submit login form
-            submit_button = page.locator('input[type="submit"][value="Login"]')
+            # Submit login form (button value is "Login!" with exclamation)
+            submit_button = page.locator('input[type="submit"][value="Login!"]')
             if not submit_button.is_visible(timeout=2000):
                 # Try alternative submit button
-                submit_button = page.locator('button[type="submit"], input[type="submit"]').first
+                submit_button = page.locator('input[type="submit"], button[type="submit"]').first
 
             submit_button.click()
             print("Submitted login form...")
@@ -530,25 +530,25 @@ class HCAScraper:
                 page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
                 page.wait_for_timeout(2000)
 
-            # Try menu navigation first (XPath: //*[@id="misc-menu"]/a then //*[@id="misc-menu"]/ul/li[5]/a)
+            # Try menu navigation first (Miscellany menu -> Home Court Ratings)
             try:
                 print("Attempting menu navigation to HCA...")
-                # Hover over Misc menu to open dropdown
-                misc_menu = page.locator('#misc-menu > a')
+                # Hover over Miscellany menu to open dropdown
+                misc_menu = page.locator('a:has-text("Miscellany")')
                 if misc_menu.is_visible(timeout=3000):
                     misc_menu.hover()
                     page.wait_for_timeout(500)
 
-                    # Click HCA link (5th item in Misc dropdown)
-                    hca_link = page.locator('#misc-menu > ul > li:nth-child(5) > a')
+                    # Click Home Court Ratings link
+                    hca_link = page.locator('a:has-text("Home Court Ratings")')
                     if hca_link.is_visible(timeout=2000):
                         hca_link.click()
                         page.wait_for_timeout(3000)
-                        print("Successfully navigated via Misc menu")
+                        print("Successfully navigated via Miscellany menu")
                     else:
-                        raise Exception("HCA link not visible in menu")
+                        raise Exception("Home Court Ratings link not visible in menu")
                 else:
-                    raise Exception("Misc menu not visible")
+                    raise Exception("Miscellany menu not visible")
             except Exception as e:
                 print(f"Menu navigation failed ({e}), using direct URL...")
                 page.goto(
