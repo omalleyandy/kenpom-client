@@ -132,17 +132,18 @@ class OvertimeScraper:
             print(f"Login failed: {e}")
             return False
 
-    def navigate_to_ncaab(self, page: Page) -> bool:
+    def navigate_to_ncaab(self, page: Page, section: str = "College Basketball") -> bool:
         """Navigate to NCAA Basketball section.
 
         Args:
             page: Playwright page object
+            section: Section name - "College Basketball" or "College Extra"
 
         Returns:
             True if navigation successful, False otherwise
         """
         try:
-            print("Navigating to NCAA Basketball section...")
+            print(f"Navigating to {section} section...")
 
             # Wait for page to fully load after login
             page.wait_for_load_state("networkidle", timeout=10000)
@@ -171,13 +172,21 @@ class OvertimeScraper:
             if not basketball_clicked:
                 print("WARNING: Could not click Basketball icon, trying direct navigation...")
 
-            # Multiple selectors for College Basketball
-            college_selectors = [
-                "label[for='gl_Basketball_College_Basketball_G']",
-                "label:has-text('College Basketball')",
-                "text=College Basketball",
-                "[ng-click*='College_Basketball']",
-            ]
+            # Multiple selectors for the target section
+            if section == "College Extra":
+                college_selectors = [
+                    "label[for='gl_Basketball_College_Extra_G']",
+                    "label:has-text('College Extra')",
+                    "text=College Extra",
+                    "[ng-click*='College_Extra']",
+                ]
+            else:
+                college_selectors = [
+                    "label[for='gl_Basketball_College_Basketball_G']",
+                    "label:has-text('College Basketball')",
+                    "text=College Basketball",
+                    "[ng-click*='College_Basketball']",
+                ]
 
             for selector in college_selectors:
                 try:
@@ -189,7 +198,7 @@ class OvertimeScraper:
                             college_bball.element_handle(),
                         )
                         page.wait_for_timeout(2000)
-                        print(f"Navigated to College Basketball (selector: {selector})")
+                        print(f"Navigated to {section} (selector: {selector})")
                         return True
                 except Exception as e:
                     print(f"Selector {selector} failed: {e}")
@@ -201,7 +210,7 @@ class OvertimeScraper:
             page.screenshot(path=str(screenshot_dir / "navigation_failed.png"))
             print(f"Debug screenshot saved to {screenshot_dir / 'navigation_failed.png'}")
 
-            print("ERROR: Could not navigate to College Basketball")
+            print(f"ERROR: Could not navigate to {section}")
             return False
 
         except Exception as e:
@@ -485,8 +494,11 @@ class OvertimeScraper:
             print(f"Scraping failed: {e}")
             return games
 
-    def fetch_ncaab_odds(self) -> pd.DataFrame:
+    def fetch_ncaab_odds(self, include_extra: bool = True) -> pd.DataFrame:
         """Fetch all NCAA Basketball odds from overtime.ag.
+
+        Args:
+            include_extra: If True, also scrape "College Extra" section
 
         Returns:
             DataFrame with columns: away_team, home_team, market_spread,
@@ -503,16 +515,29 @@ class OvertimeScraper:
                 if not self.login(page):
                     raise RuntimeError("Login failed")
 
-                # Navigate to NCAA Basketball
-                if not self.navigate_to_ncaab(page):
-                    raise RuntimeError("Could not navigate to NCAA Basketball")
+                all_games: list[GameOdds] = []
 
-                # Scrape games
-                games = self.scrape_games(page)
+                # Navigate to NCAA Basketball and scrape
+                if self.navigate_to_ncaab(page, "College Basketball"):
+                    games = self.scrape_games(page)
+                    print(f"\nScraped {len(games)} games from College Basketball")
+                    all_games.extend(games)
+
+                # Also scrape College Extra if requested
+                if include_extra:
+                    print("\n" + "=" * 50)
+                    if self.navigate_to_ncaab(page, "College Extra"):
+                        extra_games = self.scrape_games(page)
+                        print(f"\nScraped {len(extra_games)} games from College Extra")
+                        all_games.extend(extra_games)
+                    else:
+                        print("College Extra section not found or empty")
 
                 # Convert to DataFrame
-                if games:
-                    df = pd.DataFrame([vars(game) for game in games])
+                if all_games:
+                    df = pd.DataFrame([vars(game) for game in all_games])
+                    # Remove duplicates (same teams)
+                    df = df.drop_duplicates(subset=["away_team", "home_team"], keep="first")
                 else:
                     # Return empty DataFrame with correct schema
                     df = pd.DataFrame(
@@ -542,14 +567,15 @@ def main():
     from datetime import date
 
     scraper = OvertimeScraper(headless=True)  # Headless for production/CI
-    df = scraper.fetch_ncaab_odds()
+    df = scraper.fetch_ncaab_odds(include_extra=True)  # Scrape both sections
 
     if not df.empty:
         today = date.today().isoformat()
         output_path = Path(f"data/overtime_ncaab_odds_{today}.csv")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(output_path, index=False)
-        print(f"\nScraped {len(df)} games")
+        print(f"\n{'=' * 50}")
+        print(f"TOTAL: {len(df)} unique games scraped")
         print(f"Odds exported to: {output_path}")
     else:
         print("\nNo games scraped. Check screenshots to debug.")
