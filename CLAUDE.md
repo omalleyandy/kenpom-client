@@ -66,6 +66,11 @@ uv run kenpom hca --y 2025
 
 # Fetch Referee Ratings / FAA data (requires KENPOM_EMAIL/KENPOM_PASSWORD)
 uv run fetch-refs
+
+# Fetch game officials from ESPN and calculate crew FAA
+uv run fetch-officials                    # Today's games
+uv run fetch-officials --date 2025-01-15  # Specific date
+uv run fetch-officials --game-id 401827093  # Specific game
 ```
 
 ### Testing
@@ -166,6 +171,15 @@ pyrefly check
 - Authenticates with KENPOM_EMAIL/KENPOM_PASSWORD
 - Outputs JSON and CSV snapshots to data/kenpom_ref_ratings_YYYY-MM-DD.{json,csv}
 - Reference: https://kenpom.substack.com/p/a-path-to-slightly-more-consistent
+
+**ESPN Officials Scraper** (`espn_officials_scraper.py`)
+- Playwright-based scraper for ESPN gamecast pages
+- Fetches officiating crew assignments for games on a given date
+- Officials are typically posted 1-2 hours before tip-off
+- Calculates combined crew FAA by matching refs to KenPom FAA ratings
+- Includes team name normalization (ESPN → KenPom format)
+- Outputs JSON and CSV snapshots to data/espn_officials_YYYY-MM-DD.{json,csv}
+- Can run on-demand for specific games: `--game-id 401827093`
 
 ### Data Flow
 

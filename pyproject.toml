@@ -19,6 +19,7 @@ kenpom-mcp = "kenpom_client.mcp_server:main"
 fetch-odds = "kenpom_client.overtime_scraper:main"
 fetch-hca = "kenpom_client.hca_scraper:main"
 fetch-refs = "kenpom_client.ref_ratings_scraper:main"
+fetch-officials = "kenpom_client.espn_officials_scraper:main"
 
 [tool.ruff]
 line-length = 100
