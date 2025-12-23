@@ -783,11 +783,21 @@ def main():
                 else:
                     print("    No similar teams found")
 
-    # Export to CSV
+    # Export to CSV with error handling for locked files
     results_df = pd.DataFrame(valid_analyses)
     output_path = Path(f"data/todays_game_predictions_{date_str}.csv")
-    results_df.to_csv(output_path, index=False)
-    print(f"\nPredictions exported to: {output_path}")
+
+    try:
+        results_df.to_csv(output_path, index=False)
+        print(f"\nPredictions exported to: {output_path}")
+    except PermissionError:
+        # File is locked (likely open in Excel), try backup filename with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H%M%S")
+        backup_path = Path(f"data/todays_game_predictions_{date_str}_{timestamp}.csv")
+        results_df.to_csv(backup_path, index=False)
+        print(f"\nWARNING: Could not write to {output_path} (file locked)")
+        print(f"Predictions exported to backup: {backup_path}")
 
 
 if __name__ == "__main__":
