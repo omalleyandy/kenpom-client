@@ -172,23 +172,42 @@ class OvertimeScraper:
             if not basketball_clicked:
                 print("WARNING: Could not click Basketball icon, trying direct navigation...")
 
+            # Wait for the Basketball submenu to expand
+            page.wait_for_timeout(1000)
+
             # Multiple selectors for the target section
             if section == "College Extra":
+                # First, check if College Extra even exists in the menu
+                # Use text-based selector as primary (most reliable)
                 college_selectors = [
-                    "#sp_Basketball > div > ul > li:nth-child(3) > div > label",
-                    "label[for='gl_Basketball_College_Extra_G']",
                     "label:has-text('College Extra')",
                     "text=College Extra",
-                    "[ng-click*='College_Extra']",
+                    "label[for='gl_Basketball_College_Extra_G']",
+                    "#sp_Basketball label:has-text('Extra')",
+                    # Try various nth-child positions (menu order varies)
+                    "#sp_Basketball > div > ul > li:nth-child(3) > div > label",
+                    "#sp_Basketball > div > ul > li:nth-child(4) > div > label",
+                    "#sp_Basketball > div > ul > li:nth-child(5) > div > label",
                 ]
             else:
                 college_selectors = [
-                    "#sp_Basketball > div > ul > li:nth-child(2) > div > label",
-                    "label[for='gl_Basketball_College_Basketball_G']",
                     "label:has-text('College Basketball')",
                     "text=College Basketball",
-                    "[ng-click*='College_Basketball']",
+                    "label[for='gl_Basketball_College_Basketball_G']",
+                    "#sp_Basketball > div > ul > li:nth-child(2) > div > label",
                 ]
+
+            # Debug: Print available menu items
+            try:
+                menu_items = page.evaluate("""
+                    () => {
+                        const items = document.querySelectorAll('#sp_Basketball label');
+                        return Array.from(items).map(l => l.textContent.trim());
+                    }
+                """)
+                print(f"Available Basketball menu items: {menu_items}")
+            except Exception:
+                pass
 
             for selector in college_selectors:
                 try:
@@ -203,7 +222,9 @@ class OvertimeScraper:
                         print(f"Navigated to {section} (selector: {selector})")
                         return True
                 except Exception as e:
-                    print(f"Selector {selector} failed: {e}")
+                    # Only log failures for text-based selectors (reduce noise)
+                    if "nth-child" not in selector:
+                        print(f"Selector {selector} failed: {e}")
                     continue
 
             # Save debug screenshot on failure
