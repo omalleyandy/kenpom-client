@@ -35,6 +35,7 @@ class RefRating:
     faa: float  # Fouls Above Average (positive = more fouls, negative = fewer)
     rank: int  # Rank among all referees (1 = highest FAA / most fouls)
     games: Optional[int] = None  # Number of games officiated this season
+    rating: Optional[float] = None  # KenPom official rating
     conference: Optional[str] = None  # Primary conference association (if available)
 
 
@@ -419,6 +420,9 @@ class RefRatingsScraper:
             page.wait_for_timeout(500)
 
             # Extract referee data from table
+            # Table structure from officials.php:
+            # | Rank | Name + FAA subscript | Rating | Gms | Last Game |
+            # FAA is shown as subscript text after the name (e.g., "Kipp Kissinger -0.4")
             ref_data = page.evaluate("""
                 () => {
                     const result = {
@@ -426,24 +430,18 @@ class RefRatingsScraper:
                         avg_faa: 0,
                     };
 
-                    // Find the main data table
+                    // Find the main data table (the one with "Officials Rankings" data)
                     const tables = document.querySelectorAll('table');
                     console.log('Found', tables.length, 'tables');
 
-                    // Find table with referee data
+                    // Find table with referee data - look for Rating/Gms headers
                     let table = null;
                     for (const t of tables) {
-                        // Look for table headers that indicate ref ratings
-                        const headers = t.querySelectorAll('th');
-                        for (const h of headers) {
-                            const text = h.textContent.toLowerCase();
-                            if (text.includes('faa') || text.includes('official') ||
-                                text.includes('ref') || text.includes('name')) {
-                                table = t;
-                                break;
-                            }
+                        const headerText = t.textContent.toLowerCase();
+                        if (headerText.includes('rating') && headerText.includes('gms')) {
+                            table = t;
+                            break;
                         }
-                        if (table) break;
                     }
 
                     if (!table) {
@@ -461,101 +459,66 @@ class RefRatingsScraper:
                         return result;
                     }
 
-                    // Determine column indices from headers
-                    const headerRow = table.querySelector('tr');
-                    const headers = headerRow ? headerRow.querySelectorAll('th') : [];
-                    let nameCol = 0;
-                    let faaCol = -1;
-                    let gamesCol = -1;
-                    let confCol = -1;
+                    // Table structure: | Rank | Name + FAA subscript | Rating | Gms | Last Game |
+                    // The FAA is embedded in the name cell as subscript text (e.g., "Kipp Kissinger -0.4")
 
-                    headers.forEach((h, idx) => {
-                        const text = h.textContent.toLowerCase().trim();
-                        if (text.includes('faa') || text === 'faa') {
-                            faaCol = idx;
-                        } else if (text.includes('games') || text === 'g') {
-                            gamesCol = idx;
-                        } else if (text.includes('conf') || text.includes('conference')) {
-                            confCol = idx;
-                        } else if (text.includes('name') || text.includes('official') ||
-                                   text.includes('ref')) {
-                            nameCol = idx;
-                        }
-                    });
-
-                    // Get all data rows
                     const allRows = table.querySelectorAll('tr');
                     console.log('Total rows:', allRows.length);
-                    console.log('Column indices - name:', nameCol, 'faa:', faaCol,
-                                'games:', gamesCol, 'conf:', confCol);
 
-                    let rank = 0;
                     let faaSum = 0;
 
                     allRows.forEach((row, idx) => {
-                        if (row.querySelector('th')) return; // Skip header rows
+                        // Skip header rows
+                        if (row.querySelector('th')) return;
 
                         const cells = Array.from(row.querySelectorAll('td'));
-                        if (cells.length < 2) return;
+                        // Need at least: rank, name+faa, rating, gms
+                        if (cells.length < 4) return;
 
-                        // Get referee name
-                        let name = '';
-                        if (nameCol >= 0 && nameCol < cells.length) {
-                            const nameCell = cells[nameCol];
-                            const link = nameCell.querySelector('a');
-                            name = link ? link.textContent.trim() : nameCell.textContent.trim();
-                        }
+                        // Cell 0: Rank number (we'll use our own counter)
+                        // Cell 1: Name cell with FAA as subscript
+                        // Cell 2: Rating
+                        // Cell 3: Gms (games count)
 
+                        const nameCell = cells[1];
+                        if (!nameCell) return;
+
+                        // Get the referee name from the anchor tag
+                        const nameLink = nameCell.querySelector('a');
+                        if (!nameLink) return;
+                        const name = nameLink.textContent.trim();
                         if (!name || name.length < 2) return;
 
-                        // Get FAA value
-                        let faa = null;
-                        if (faaCol >= 0 && faaCol < cells.length) {
-                            const faaText = cells[faaCol].textContent.trim();
-                            faa = parseFloat(faaText);
+                        // Get FAA from the full cell text (includes subscript)
+                        // Full text is like "Kipp Kissinger -0.4" or "Paul Szelc +1.8"
+                        const fullText = nameCell.textContent.trim();
+
+                        // Extract FAA: it's the signed number at the end after the name
+                        // Pattern: name followed by space and signed decimal like " -0.4" or " +1.8"
+                        const faaMatch = fullText.match(/([+-]?\\d+\\.\\d+)\\s*$/);
+                        if (!faaMatch) {
+                            console.log('No FAA found in:', fullText);
+                            return;
                         }
+                        const faa = parseFloat(faaMatch[1]);
+                        if (isNaN(faa)) return;
 
-                        // If FAA column not found, look for numeric value in typical range
-                        if (faa === null || isNaN(faa)) {
-                            for (let i = 1; i < cells.length; i++) {
-                                const text = cells[i].textContent.trim();
-                                // Skip cells with links
-                                if (cells[i].querySelector('a')) continue;
-                                const num = parseFloat(text);
-                                // FAA values typically -3 to +3
-                                if (!isNaN(num) && num >= -5 && num <= 5) {
-                                    faa = num;
-                                    break;
-                                }
-                            }
-                        }
+                        // Get Rating from cell 2
+                        const ratingText = cells[2]?.textContent.trim();
+                        const rating = parseFloat(ratingText);
 
-                        if (faa === null || isNaN(faa)) return;
+                        // Get Games from cell 3
+                        const gamesText = cells[3]?.textContent.trim();
+                        const games = parseInt(gamesText, 10);
 
-                        // Get games count if available
-                        let games = null;
-                        if (gamesCol >= 0 && gamesCol < cells.length) {
-                            const gamesText = cells[gamesCol].textContent.trim();
-                            const gamesNum = parseInt(gamesText, 10);
-                            if (!isNaN(gamesNum) && gamesNum > 0) {
-                                games = gamesNum;
-                            }
-                        }
-
-                        // Get conference if available
-                        let conf = null;
-                        if (confCol >= 0 && confCol < cells.length) {
-                            conf = cells[confCol].textContent.trim();
-                        }
-
-                        rank++;
                         faaSum += faa;
                         result.refs.push({
                             name: name,
                             faa: faa,
-                            rank: rank,
-                            games: games,
-                            conference: conf,
+                            rank: result.refs.length + 1,
+                            games: isNaN(games) ? null : games,
+                            rating: isNaN(rating) ? null : rating,
+                            conference: null,
                         });
                     });
 
@@ -591,6 +554,7 @@ class RefRatingsScraper:
                     faa=r["faa"],
                     rank=r["rank"],
                     games=r.get("games"),
+                    rating=r.get("rating"),
                     conference=r.get("conference"),
                 )
                 for r in ref_data["refs"]
@@ -620,38 +584,45 @@ class RefRatingsScraper:
                 };
 
                 const allRows = document.querySelectorAll('tr');
-                let rank = 0;
                 let faaSum = 0;
 
                 allRows.forEach(row => {
                     const cells = row.querySelectorAll('td');
-                    if (cells.length < 2) return;
+                    // Need at least: rank, name+faa, rating, gms
+                    if (cells.length < 4) return;
 
-                    // Get name from first cell
-                    const firstCell = cells[0];
-                    const anchor = firstCell.querySelector('a');
-                    const name = anchor ? anchor.textContent.trim() : firstCell.textContent.trim();
+                    // Cell 1 has name + FAA subscript
+                    const nameCell = cells[1];
+                    if (!nameCell) return;
 
+                    const nameLink = nameCell.querySelector('a');
+                    if (!nameLink) return;
+                    const name = nameLink.textContent.trim();
                     if (!name || name.length < 2) return;
 
-                    // Look for FAA-like numeric value
-                    for (let i = 1; i < cells.length; i++) {
-                        const text = cells[i].textContent.trim();
-                        const num = parseFloat(text);
-                        // FAA values typically -3 to +3
-                        if (!isNaN(num) && num >= -5 && num <= 5 && text.match(/^-?\\d+\\.\\d+$/)) {
-                            rank++;
-                            faaSum += num;
-                            result.refs.push({
-                                name: name,
-                                faa: num,
-                                rank: rank,
-                                games: null,
-                                conference: null,
-                            });
-                            break;
-                        }
-                    }
+                    // Extract FAA from full cell text
+                    const fullText = nameCell.textContent.trim();
+                    const faaMatch = fullText.match(/([+-]?\\d+\\.\\d+)\\s*$/);
+                    if (!faaMatch) return;
+
+                    const faa = parseFloat(faaMatch[1]);
+                    if (isNaN(faa)) return;
+
+                    // Get Rating from cell 2
+                    const rating = parseFloat(cells[2]?.textContent.trim());
+
+                    // Get Games from cell 3
+                    const games = parseInt(cells[3]?.textContent.trim(), 10);
+
+                    faaSum += faa;
+                    result.refs.push({
+                        name: name,
+                        faa: faa,
+                        rank: result.refs.length + 1,
+                        games: isNaN(games) ? null : games,
+                        rating: isNaN(rating) ? null : rating,
+                        conference: null,
+                    });
                 });
 
                 if (result.refs.length > 0) {
