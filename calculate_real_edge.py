@@ -26,6 +26,42 @@ from kenpom_client.validation import (
     create_run_stats,
 )
 
+# Team name normalization for matching between overtime.ag and KenPom
+# Maps overtime.ag names to standardized KenPom names
+TEAM_NAME_FIXES: dict[str, str] = {
+    # Apostrophe issues
+    "St. Johns": "St. John's",
+    "St Johns": "St. John's",
+    # Abbreviation differences
+    "Morgan State": "Morgan St.",
+    # CS/Cal St. variations
+    "CS Bakersfield": "Cal St. Bakersfield",
+    "CS Northridge": "Cal St. Northridge",
+    "CS Fullerton": "Cal St. Fullerton",
+    # Common variations
+    "Loyola-Chicago": "Loyola Chicago",
+    "UConn": "Connecticut",
+    "Ole Miss": "Mississippi",
+    "Miami FL": "Miami FL",
+    "Miami OH": "Miami OH",
+}
+
+
+def normalize_team_name(name: str) -> str:
+    """Normalize team name for matching between data sources."""
+    # Direct lookup first
+    if name in TEAM_NAME_FIXES:
+        return TEAM_NAME_FIXES[name]
+    return name
+
+
+def normalize_team_names_in_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize team names in a DataFrame for consistent matching."""
+    df = df.copy()
+    df["away_team"] = df["away_team"].apply(normalize_team_name)
+    df["home_team"] = df["home_team"].apply(normalize_team_name)
+    return df
+
 
 def normal_cdf(x: float) -> float:
     """Approximate the cumulative distribution function of standard normal."""
@@ -318,6 +354,11 @@ def main():
 
     predictions = pd.read_csv(predictions_path)
     market = pd.read_csv(market_path)
+
+    # Normalize team names for consistent matching
+    print("\nNormalizing team names for matching...")
+    market = normalize_team_names_in_df(market)
+    predictions = normalize_team_names_in_df(predictions)
 
     # Validate input files
     print("=" * 60)
