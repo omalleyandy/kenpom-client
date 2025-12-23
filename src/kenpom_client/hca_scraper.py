@@ -561,6 +561,28 @@ class HCAScraper:
             page.screenshot(path=str(screenshots_dir / "kenpom_hca_page.png"))
             print(f"Screenshot saved to {screenshots_dir / 'kenpom_hca_page.png'}")
 
+            # Scroll to load all teams (the table may be virtualized or lazy-loaded)
+            print("Scrolling to load all teams...")
+            prev_count = 0
+            for scroll_attempt in range(10):
+                # Scroll to bottom
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(500)
+
+                # Count current rows
+                current_count = page.evaluate("""
+                    () => document.querySelectorAll('table tr').length
+                """)
+
+                if current_count == prev_count and scroll_attempt > 2:
+                    print(f"All teams loaded ({current_count} rows)")
+                    break
+                prev_count = current_count
+
+            # Scroll back to top
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(500)
+
             # Extract HCA data from table using JavaScript
             hca_data = page.evaluate("""
                 () => {
