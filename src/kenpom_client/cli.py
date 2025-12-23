@@ -131,6 +131,13 @@ def main() -> None:
     p_misc = sub.add_parser("miscstats", help="Fetch miscellaneous stats for a season")
     p_misc.add_argument("--y", type=int, required=True, help="Season year")
 
+    # Home Court Advantage scraping
+    p_hca = sub.add_parser("hca", help="Scrape Home Court Advantage data from KenPom")
+    p_hca.add_argument("--y", type=int, default=2025, help="Season year (default: 2025)")
+    p_hca.add_argument(
+        "--headed", action="store_true", help="Run browser in headed mode (for debugging)"
+    )
+
     args = parser.parse_args()
     settings = Settings.from_env()
 
@@ -225,6 +232,44 @@ def main() -> None:
             data = client.misc_stats(y=args.y)
             df = pd.DataFrame([m.model_dump() for m in data])
             _write_outputs(df, out_dir / f"kenpom_miscstats_{args.y}")
+
+        elif args.cmd == "hca":
+            # HCA scraping uses Playwright, not the API client
+            from datetime import date as date_type
+
+            from .hca_scraper import HCAScraper
+
+            scraper = HCAScraper(headless=not args.headed)
+            snapshot = scraper.fetch_hca_data(season=args.y)
+
+            if snapshot:
+                today = date_type.today().isoformat()
+
+                # Save JSON snapshot
+                json_path = out_dir / f"kenpom_hca_{today}.json"
+                json_path.parent.mkdir(parents=True, exist_ok=True)
+                json_path.write_text(snapshot.to_json())
+                print(f"HCA snapshot saved to: {json_path}")
+
+                # Save CSV
+                df = snapshot.to_dataframe()
+                csv_path = out_dir / f"kenpom_hca_{today}.csv"
+                df.to_csv(csv_path, index=False)
+                print(f"HCA CSV saved to: {csv_path}")
+
+                # Summary
+                print(f"\nTeams scraped: {len(snapshot.teams)}")
+                print(f"National average HCA: {snapshot.national_avg_hca:.2f}")
+
+                # Top 5 HCAs
+                sorted_teams = sorted(snapshot.teams, key=lambda t: t.hca, reverse=True)
+                print("\nTop 5 Home Court Advantages:")
+                for i, team in enumerate(sorted_teams[:5], 1):
+                    print(f"  {i}. {team.team}: {team.hca:.2f}")
+            else:
+                print("ERROR: Failed to scrape HCA data")
+                raise SystemExit(1)
+            return  # Don't close API client (not used for HCA)
 
     finally:
         client.close()

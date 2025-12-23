@@ -8,9 +8,19 @@ differentials.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from kenpom_client.hca_scraper import HCASnapshot
+
+# Module-level HCA snapshot cache
+_hca_snapshot_cache: Optional["HCASnapshot"] = None
+
+# Default HCA when no team-specific data is available
+DEFAULT_HCA = 3.5
 
 
 @dataclass(frozen=True)
@@ -196,25 +206,84 @@ def calculate_matchup_features(away: pd.Series, home: pd.Series) -> MatchupFeatu
     )
 
 
-def calculate_home_court_factor(home: pd.Series) -> float:
-    """Calculate team-specific home court advantage.
+def load_hca_snapshot() -> Optional["HCASnapshot"]:
+    """Load the most recent HCA snapshot from disk.
 
-    Placeholder: Returns constant 3.5 for now.
-
-    Future implementation should consider:
-    - Home/away win percentage splits
-    - Venue-specific factors (altitude, arena size, crowd capacity)
-    - Conference vs non-conference games
-    - Historical home court advantage trends
-
-    Args:
-        home: Team data for home team (pandas Series)
+    Caches the result to avoid repeated file reads.
 
     Returns:
-        Home court advantage in points (currently constant 3.5)
+        HCASnapshot or None if no snapshot file exists
     """
-    # TODO: Implement team-specific HCA using historical splits
-    return 3.5
+    global _hca_snapshot_cache
+
+    if _hca_snapshot_cache is not None:
+        return _hca_snapshot_cache
+
+    # Import here to avoid circular imports
+    from kenpom_client.hca_scraper import HCASnapshot
+
+    # Find most recent HCA snapshot
+    data_dir = Path("data")
+    if not data_dir.exists():
+        return None
+
+    hca_files = sorted(data_dir.glob("kenpom_hca_*.json"), reverse=True)
+    if not hca_files:
+        return None
+
+    try:
+        _hca_snapshot_cache = HCASnapshot.from_json(hca_files[0].read_text())
+        return _hca_snapshot_cache
+    except Exception:
+        return None
+
+
+def clear_hca_cache() -> None:
+    """Clear the HCA snapshot cache (useful for testing)."""
+    global _hca_snapshot_cache
+    _hca_snapshot_cache = None
+
+
+def calculate_home_court_factor(
+    home: pd.Series, hca_snapshot: Optional["HCASnapshot"] = None
+) -> float:
+    """Calculate team-specific home court advantage.
+
+    Uses KenPom HCA data scraped from kenpom.com/hca.php to get team-specific
+    home court advantage values. Falls back to DEFAULT_HCA (3.5) if no data
+    is available.
+
+    Args:
+        home: Team data for home team (pandas Series with 'team' column)
+        hca_snapshot: Optional pre-loaded HCA snapshot (loads from disk if None)
+
+    Returns:
+        Home court advantage in points (team-specific or 3.5 default)
+
+    Example:
+        >>> home_team = df[df['team'] == 'Kansas'].iloc[0]
+        >>> hca = calculate_home_court_factor(home_team)
+        >>> print(f"Kansas HCA: {hca:.2f}")  # Phog Allen is legendary
+    """
+    # Get team name from Series
+    team_name = home.get("team")
+    if team_name is None:
+        return DEFAULT_HCA
+
+    # Load HCA snapshot if not provided
+    if hca_snapshot is None:
+        hca_snapshot = load_hca_snapshot()
+
+    if hca_snapshot is None:
+        return DEFAULT_HCA
+
+    # Look up team-specific HCA
+    team_hca = hca_snapshot.get_team_hca(str(team_name))
+    if team_hca is not None:
+        return team_hca
+
+    # Fall back to national average from snapshot
+    return hca_snapshot.national_avg_hca
 
 
 @dataclass

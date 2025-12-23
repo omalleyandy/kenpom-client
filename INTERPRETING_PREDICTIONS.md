@@ -40,7 +40,8 @@ This guide explains how to interpret the enriched KenPom game predictions CSV an
 - **predicted_margin**: Expected point differential (home team perspective)
   - **Positive**: Home team favored (e.g., +9.7 = home by 9.7)
   - **Negative**: Away team favored (e.g., -5.2 = away by 5.2)
-  - **Formula**: Home AdjEM - Away AdjEM + 3.5 (home court advantage)
+  - **Formula**: Home AdjEM - Away AdjEM + HCA (team-specific home court advantage)
+  - **HCA**: Dynamic home court advantage from kenpom.com/hca.php (falls back to 3.5 if unavailable)
 
 - **home_win_prob** / **away_win_prob**: Win probability percentages
   - Calculated using normal distribution with predicted_margin and avg_sigma
