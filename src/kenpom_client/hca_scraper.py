@@ -225,6 +225,25 @@ class HCAScraper:
             if i == 5:
                 print("Still waiting...")
 
+        # If still stuck, try refreshing
+        print("Verification stuck, trying page refresh...")
+        page.reload(wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(5000)
+
+        # Check if refresh helped
+        still_verifying = False
+        for selector in cloudflare_indicators:
+            try:
+                if page.locator(selector).is_visible(timeout=1000):
+                    still_verifying = True
+                    break
+            except Exception:
+                continue
+
+        if not still_verifying:
+            print("Cloudflare verification completed after refresh!")
+            return
+
         # If still stuck, prompt user
         if not self.headless:
             print("\n" + "=" * 60)
@@ -696,8 +715,24 @@ class HCAScraper:
             HCASnapshot with all team HCA data, or None on failure
         """
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
-            context = browser.new_context()
+            # Launch with args to look more like a real browser (helps with Cloudflare)
+            browser = p.chromium.launch(
+                headless=self.headless,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                ],
+            )
+            # Use realistic browser context
+            context = browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1920, "height": 1080},
+                locale="en-US",
+            )
             page = context.new_page()
 
             try:
