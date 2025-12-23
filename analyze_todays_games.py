@@ -47,6 +47,10 @@ TEAM_ALIASES: dict[str, list[str]] = {
     # Wright State
     "Wright State": ["Wright St."],
     "Wright St": ["Wright St."],
+    # St. John's variations
+    "St. Johns": ["St. John's"],
+    "St Johns": ["St. John's"],
+    "Saint Johns": ["St. John's"],
     # St. Joseph's variations
     "St. Josephs": ["Saint Joseph's", "St. Joseph's"],
     "St Josephs": ["Saint Joseph's", "St. Joseph's"],
