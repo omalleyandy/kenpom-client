@@ -134,11 +134,15 @@ class HCAScraper:
         # Check for Cloudflare verification page
         cloudflare_indicators = [
             "text=Verifying you are human",
+            "text=Verify you are human",
             "text=Checking your browser",
             "text=needs to review the security",
             "text=Just a moment",
+            "text=completing the action below",
             "#challenge-running",
             "#challenge-stage",
+            "iframe[src*='challenges.cloudflare.com']",
+            "iframe[src*='turnstile']",
         ]
 
         is_cloudflare = False
@@ -158,9 +162,50 @@ class HCAScraper:
         print("=" * 60)
         print("Waiting for automatic verification...")
 
-        # Wait up to 15 seconds for automatic verification
-        for i in range(15):
+        # Wait up to 10 seconds for automatic verification
+        for i in range(10):
             page.wait_for_timeout(1000)
+
+            # Check if a clickable checkbox appeared (Turnstile)
+            turnstile_selectors = [
+                "iframe[src*='challenges.cloudflare.com']",
+                "iframe[src*='turnstile']",
+                "text=completing the action below",
+            ]
+
+            checkbox_appeared = False
+            for selector in turnstile_selectors:
+                try:
+                    if page.locator(selector).is_visible(timeout=500):
+                        checkbox_appeared = True
+                        break
+                except Exception:
+                    continue
+
+            if checkbox_appeared and not self.headless:
+                print("\n" + "=" * 60)
+                print("CLOUDFLARE CHECKBOX DETECTED")
+                print("=" * 60)
+                print("Click the 'Verify you are human' checkbox in the browser.")
+                print("DO NOT close the browser!")
+                print("=" * 60)
+                input("\nPress ENTER after clicking the checkbox...")
+                page.wait_for_timeout(3000)
+
+                # Check if verification completed
+                still_verifying = False
+                for selector in cloudflare_indicators:
+                    try:
+                        if page.locator(selector).is_visible(timeout=1000):
+                            still_verifying = True
+                            break
+                    except Exception:
+                        continue
+
+                if not still_verifying:
+                    print("Cloudflare verification completed!")
+                    return
+                continue
 
             # Check if verification completed
             still_verifying = False
@@ -177,7 +222,7 @@ class HCAScraper:
                 page.wait_for_timeout(2000)
                 return
 
-            if i == 7:
+            if i == 5:
                 print("Still waiting...")
 
         # If still stuck, prompt user
