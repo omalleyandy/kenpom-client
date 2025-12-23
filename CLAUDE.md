@@ -30,6 +30,10 @@ For overtime.ag odds scraping:
 - `OV_CUSTOMER_ID` - overtime.ag customer ID (required for fetch-odds)
 - `OV_PASSWORD` - overtime.ag password (required for fetch-odds)
 
+For KenPom web scraping (HCA, etc.):
+- `KENPOM_EMAIL` - KenPom account email (required for fetch-hca)
+- `KENPOM_PASSWORD` - KenPom account password (required for fetch-hca)
+
 Create a `.env` file in the project root with these values.
 
 ## Common Commands
@@ -54,6 +58,11 @@ uv run kenpom archive --date 2024-03-15
 
 # Fetch game predictions for a date
 uv run kenpom fanmatch --date 2025-01-15
+
+# Fetch Home Court Advantage data (requires KENPOM_EMAIL/KENPOM_PASSWORD)
+uv run fetch-hca
+# Or via CLI:
+uv run kenpom hca --y 2025
 ```
 
 ### Testing
@@ -135,8 +144,15 @@ pyrefly check
 
 **CLI** (`cli.py`)
 - Entry point: `kenpom` command (defined in `pyproject.toml`)
-- Subcommands: `teams`, `ratings`, `archive`, `fanmatch`
+- Subcommands: `teams`, `ratings`, `archive`, `fanmatch`, `hca`
 - Exports to CSV, JSON, and Parquet simultaneously
+
+**HCA Scraper** (`hca_scraper.py`)
+- Playwright-based scraper for kenpom.com/hca.php
+- Extracts team-specific home court advantage values
+- Authenticates with KENPOM_EMAIL/KENPOM_PASSWORD
+- Outputs JSON and CSV snapshots to data/kenpom_hca_YYYY-MM-DD.{json,csv}
+- Used by matchup.py and prediction.py for dynamic HCA (replaces hardcoded 3.5)
 
 ### Data Flow
 

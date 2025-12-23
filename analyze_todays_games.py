@@ -29,8 +29,9 @@ from kenpom_client.prediction import predict_game
 from kenpom_client.client import KenPomClient
 from kenpom_client.config import Settings
 
-# Home court advantage in college basketball (points)
-HOME_COURT_ADVANTAGE = 3.5
+# NOTE: Home court advantage is now dynamically loaded from KenPom HCA data
+# The hardcoded 3.5 constant has been replaced with team-specific HCA values
+# See: src/kenpom_client/matchup.py::calculate_home_court_factor()
 
 # Team name aliases: maps overtime.ag names to KenPom names
 # Format: "overtime_name": ["kenpom_name", "alt1", "alt2", ...]

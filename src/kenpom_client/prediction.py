@@ -21,8 +21,9 @@ import pandas as pd
 
 from kenpom_client.matchup import MatchupFeatures
 
-# Home court advantage in college basketball (points)
-HOME_COURT_ADVANTAGE = 3.5
+# Default home court advantage in college basketball (points)
+# This is used as a fallback when team-specific HCA data is not available
+DEFAULT_HOME_COURT_ADVANTAGE = 3.5
 
 # Heuristic coefficients for enhanced margin model
 # Research-based conservative adjustments (±2 pts max total)
@@ -104,21 +105,25 @@ def normal_cdf(x: float) -> float:
 
 
 def calculate_margin_baseline(
-    home_adj_em: float, away_adj_em: float, home_court_advantage: float = 3.5
+    home_adj_em: float,
+    away_adj_em: float,
+    home_court_advantage: float = DEFAULT_HOME_COURT_ADVANTAGE,
 ) -> float:
     """Calculate baseline margin prediction using current simple formula.
 
     Args:
         home_adj_em: Home team adjusted efficiency margin
         away_adj_em: Away team adjusted efficiency margin
-        home_court_advantage: Home court points (default: 3.5)
+        home_court_advantage: Home court points (default: 3.5, can be team-specific)
 
     Returns:
         Predicted margin from home team perspective (positive = home favored)
 
     Example:
-        >>> calculate_margin_baseline(22.0, 12.3)
+        >>> calculate_margin_baseline(22.0, 12.3)  # Uses default 3.5 HCA
         13.2
+        >>> calculate_margin_baseline(22.0, 12.3, 4.5)  # Kansas at Phog Allen
+        13.7
     """
     return home_adj_em - away_adj_em + home_court_advantage
 
@@ -222,11 +227,12 @@ def calculate_margin_enhanced(
     """Calculate enhanced margin with heuristic adjustments.
 
     Applies conservative adjustments (±1-2 pts max) using matchup features.
+    Uses team-specific home court advantage from matchup_features.home_court_factor.
 
     Args:
         home_adj_em: Home team adjusted efficiency margin
         away_adj_em: Away team adjusted efficiency margin
-        matchup_features: Computed matchup features
+        matchup_features: Computed matchup features (includes team-specific HCA)
         coefficients: Optional learned coefficients (for ML model replacement)
                      If None, uses HEURISTIC_COEFFICIENTS
 
@@ -241,8 +247,10 @@ def calculate_margin_enhanced(
     """
     coef = coefficients or HEURISTIC_COEFFICIENTS
 
-    # Start with baseline
-    margin_baseline = calculate_margin_baseline(home_adj_em, away_adj_em)
+    # Start with baseline using team-specific HCA from matchup features
+    margin_baseline = calculate_margin_baseline(
+        home_adj_em, away_adj_em, matchup_features.home_court_factor
+    )
 
     # Calculate individual adjustments
     adjustments = {
@@ -362,8 +370,10 @@ def predict_game(
 
         matchup_features = calculate_matchup_features(away, home)
 
-    # Baseline predictions
-    margin_baseline = calculate_margin_baseline(home["adj_em"], away["adj_em"])
+    # Baseline predictions (now uses team-specific HCA from matchup_features)
+    margin_baseline = calculate_margin_baseline(
+        home["adj_em"], away["adj_em"], matchup_features.home_court_factor
+    )
     sigma_baseline = calculate_sigma_baseline(away["sigma"], home["sigma"])
     win_prob_baseline = normal_cdf(margin_baseline / sigma_baseline)
 
