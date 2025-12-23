@@ -63,6 +63,9 @@ uv run kenpom fanmatch --date 2025-01-15
 uv run fetch-hca
 # Or via CLI:
 uv run kenpom hca --y 2025
+
+# Fetch Referee Ratings / FAA data (requires KENPOM_EMAIL/KENPOM_PASSWORD)
+uv run fetch-refs
 ```
 
 ### Testing
@@ -153,6 +156,16 @@ pyrefly check
 - Authenticates with KENPOM_EMAIL/KENPOM_PASSWORD
 - Outputs JSON and CSV snapshots to data/kenpom_hca_YYYY-MM-DD.{json,csv}
 - Used by matchup.py and prediction.py for dynamic HCA (replaces hardcoded 3.5)
+
+**Ref Ratings Scraper** (`ref_ratings_scraper.py`)
+- Playwright-based scraper for kenpom.com/officials.php
+- Extracts FAA (Fouls Above Average) ratings for all referees
+- FAA measures how officials deviate from average foul-calling tendencies
+  - Positive FAA = calls more fouls than average
+  - Negative FAA = calls fewer fouls than average
+- Authenticates with KENPOM_EMAIL/KENPOM_PASSWORD
+- Outputs JSON and CSV snapshots to data/kenpom_ref_ratings_YYYY-MM-DD.{json,csv}
+- Reference: https://kenpom.substack.com/p/a-path-to-slightly-more-consistent
 
 ### Data Flow
 

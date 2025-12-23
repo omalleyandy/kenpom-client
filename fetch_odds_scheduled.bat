@@ -54,6 +54,17 @@ if %errorlevel% equ 0 (
         echo [%date% %time%] WARNING: HCA fetch failed - using existing snapshot or default 3.5
     )
 
+    REM Fetch fresh Referee Ratings (FAA - Fouls Above Average) data
+    REM This runs in headless mode - if CAPTCHA appears, falls back to existing snapshot
+    echo [%date% %time%] Fetching Referee Ratings (FAA) from kenpom.com...
+    "%PYTHON_EXE%" -m kenpom_client.ref_ratings_scraper --headless
+
+    if %errorlevel% equ 0 (
+        echo [%date% %time%] SUCCESS: Referee ratings fetched
+    ) else (
+        echo [%date% %time%] WARNING: Referee ratings fetch failed - using existing snapshot
+    )
+
     REM Run analyze_todays_games.py to generate predictions
     echo [%date% %time%] Generating game predictions...
     "%PYTHON_EXE%" analyze_todays_games.py
