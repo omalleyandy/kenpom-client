@@ -175,6 +175,7 @@ class OvertimeScraper:
             # Multiple selectors for the target section
             if section == "College Extra":
                 college_selectors = [
+                    "#sp_Basketball > div > ul > li:nth-child(3) > div > label",
                     "label[for='gl_Basketball_College_Extra_G']",
                     "label:has-text('College Extra')",
                     "text=College Extra",
@@ -182,6 +183,7 @@ class OvertimeScraper:
                 ]
             else:
                 college_selectors = [
+                    "#sp_Basketball > div > ul > li:nth-child(2) > div > label",
                     "label[for='gl_Basketball_College_Basketball_G']",
                     "label:has-text('College Basketball')",
                     "text=College Basketball",
