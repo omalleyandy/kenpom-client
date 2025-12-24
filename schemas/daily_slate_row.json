@@ -1,29 +1,133 @@
 {
   "$id": "daily_slate_row",
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DailySlateRow",
+  "description": "Single game prediction row in the daily slate table",
   "type": "object",
-  "required": ["date","season","game_id","home","visitor","proj_home","proj_visitor","proj_total","proj_margin_home_minus_visitor","win_prob_home","win_prob_visitor","possessions","method","feature_source_home","feature_source_visitor","warnings"],
+  "required": [
+    "date",
+    "season",
+    "game_id",
+    "home",
+    "visitor",
+    "proj_home",
+    "proj_visitor",
+    "proj_total",
+    "proj_margin_home_minus_visitor",
+    "win_prob_home",
+    "win_prob_visitor",
+    "possessions",
+    "method",
+    "feature_source_home",
+    "feature_source_visitor",
+    "warnings"
+  ],
   "properties": {
-    "date": {"type":"string","format":"date"},
-    "season": {"type":"integer","minimum":2000,"maximum":2100},
-    "game_id": {"type":"string"},
-    "home": {"type":"string"},
-    "visitor": {"type":"string"},
-    "proj_home": {"type":"number"},
-    "proj_visitor": {"type":"number"},
-    "proj_total": {"type":"number"},
-    "proj_margin_home_minus_visitor": {"type":"number"},
-    "win_prob_home": {"type":"number","minimum":0,"maximum":1},
-    "win_prob_visitor": {"type":"number","minimum":0,"maximum":1},
-    "possessions": {"type":"number"},
-    "method": {"type":"string","enum":["fanmatch","kenpom_model","archive_backtest"]},
-    "feature_source_home": {"type":"string"},
-    "feature_source_visitor": {"type":"string"},
-    "warnings": {"type":"array","items":{"type":"string"}},
-    "fanmatch_raw_margin": {"type":"number"},
-    "fanmatch_raw_total": {"type":"number"},
-    "fanmatch_hca_applied": {"type":"number"},
-    "fanmatch_tempo_home": {"type":"number"},
-    "fanmatch_tempo_visitor": {"type":"number"}
-  }
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Game date in YYYY-MM-DD format"
+    },
+    "season": {
+      "type": "integer",
+      "minimum": 2000,
+      "maximum": 2100,
+      "description": "Season year (e.g., 2025 for 2024-25 season)"
+    },
+    "game_id": {
+      "type": "string",
+      "description": "Unique game identifier from fanmatch GameID"
+    },
+    "home": {
+      "type": "string",
+      "description": "Home team name (normalized to KenPom format)"
+    },
+    "visitor": {
+      "type": "string",
+      "description": "Visitor team name (normalized to KenPom format)"
+    },
+    "proj_home": {
+      "type": "number",
+      "description": "Projected home team score"
+    },
+    "proj_visitor": {
+      "type": "number",
+      "description": "Projected visitor score"
+    },
+    "proj_total": {
+      "type": "number",
+      "description": "Projected total points (proj_home + proj_visitor)"
+    },
+    "proj_margin_home_minus_visitor": {
+      "type": "number",
+      "description": "Projected spread from home perspective (positive = home favored)"
+    },
+    "win_prob_home": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Home team win probability [0, 1]"
+    },
+    "win_prob_visitor": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Visitor win probability (1 - win_prob_home)"
+    },
+    "possessions": {
+      "type": "number",
+      "description": "Projected game possessions (avg of team tempos)"
+    },
+    "method": {
+      "type": "string",
+      "enum": ["fanmatch", "kenpom_model", "archive_backtest"],
+      "description": "Projection method: fanmatch (API direct), kenpom_model (OE/DE crossover), archive_backtest (historical)"
+    },
+    "feature_source_home": {
+      "type": "string",
+      "description": "Source of home team features (e.g., 'ratings:2025-01-15' or 'archive:2025-01-14')"
+    },
+    "feature_source_visitor": {
+      "type": "string",
+      "description": "Source of visitor team features"
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Empty if clean; contains issue strings (e.g., 'team_name_fuzzy_matched', 'missing_hca')"
+    },
+    "fanmatch_raw_margin": {
+      "type": "number",
+      "description": "[Trace] Original margin from fanmatch API (HomePred - VisitorPred)"
+    },
+    "fanmatch_raw_total": {
+      "type": "number",
+      "description": "[Trace] Original total from fanmatch API (HomePred + VisitorPred)"
+    },
+    "fanmatch_hca_applied": {
+      "type": "number",
+      "description": "[Trace] Home court advantage value used in projection"
+    },
+    "fanmatch_tempo_home": {
+      "type": "number",
+      "description": "[Trace] Home team PredTempo from fanmatch"
+    },
+    "fanmatch_tempo_visitor": {
+      "type": "number",
+      "description": "[Trace] Visitor team tempo (derived from ratings)"
+    },
+    "fanmatch_home_rank": {
+      "type": ["integer", "null"],
+      "description": "[Trace] Home team KenPom rank from fanmatch"
+    },
+    "fanmatch_visitor_rank": {
+      "type": ["integer", "null"],
+      "description": "[Trace] Visitor team KenPom rank from fanmatch"
+    },
+    "fanmatch_thrill_score": {
+      "type": "number",
+      "description": "[Trace] Thrill score indicating game watchability"
+    }
+  },
+  "additionalProperties": false
 }
