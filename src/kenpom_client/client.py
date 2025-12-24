@@ -40,6 +40,12 @@ class KenPomClient:
         self._cache = FileCache(settings.cache_dir, settings.cache_ttl_seconds)
         self._rl = RateLimiter(settings.rate_limit_rps)
 
+    def __enter__(self) -> "KenPomClient":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
     def close(self) -> None:
         self._http.close()
 
