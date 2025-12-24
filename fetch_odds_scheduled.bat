@@ -1,18 +1,22 @@
 @echo off
+setlocal EnableDelayedExpansion
 REM ===========================================================================
 REM Scheduled Odds Fetcher for overtime.ag College Basketball
 REM
 REM This script runs via Windows Task Scheduler to automatically fetch
 REM College Basketball odds from overtime.ag at 4:00 AM PST daily.
 REM It will retry every 10 minutes if odds are not yet available.
+REM
+REM NOTE: Uses delayed expansion to handle paths with spaces (e.g., OneDrive)
 REM ===========================================================================
 
-REM Set working directory to project root
-cd /d %~dp0
+REM Set working directory to project root (handle spaces in path)
+cd /d "%~dp0"
 
-REM Setup logging
-set LOGFILE=%~dp0logs\odds_fetch.log
-if not exist "%~dp0logs" mkdir "%~dp0logs"
+REM Setup logging (quote all paths for spaces)
+set "PROJECT_ROOT=%~dp0"
+set "LOGFILE=%PROJECT_ROOT%logs\odds_fetch.log"
+if not exist "%PROJECT_ROOT%logs" mkdir "%PROJECT_ROOT%logs"
 
 REM Call main logic with output redirection
 call :main >> "%LOGFILE%" 2>&1
@@ -24,10 +28,16 @@ set MAX_ATTEMPTS=12
 set RETRY_DELAY=600
 set ATTEMPT=1
 
-REM Get absolute paths using batch file location
-set PROJECT_ROOT=%~dp0
-set UV_EXE=%USERPROFILE%\.local\bin\uv.exe
-set PYTHON_EXE=%PROJECT_ROOT%.venv\Scripts\python.exe
+REM Get absolute paths using batch file location (quoted for spaces)
+set "UV_EXE=%USERPROFILE%\.local\bin\uv.exe"
+set "PYTHON_EXE=%PROJECT_ROOT%.venv\Scripts\python.exe"
+
+REM Verify Python exists
+if not exist "%PYTHON_EXE%" (
+    echo [%date% %time%] ERROR: Python not found at "%PYTHON_EXE%"
+    echo [%date% %time%] Run 'uv venv' and 'uv sync' to create the virtual environment
+    exit /b 1
+)
 
 :RETRY_LOOP
 echo.
