@@ -42,6 +42,23 @@ class GameOdds:
     sport: str = "NCAAB"  # NCAA Men's Basketball
 
 
+def _parse_spread(value: str | float | None) -> float | None:
+    """Parse spread value, handling PK (pick'em) as 0."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().upper()
+    if not s or s == "-":
+        return None
+    if "PK" in s or "PICK" in s or "EVEN" in s:
+        return 0.0
+    try:
+        return float(s.replace("½", ".5"))
+    except ValueError:
+        return None
+
+
 class OvertimeScraper:
     """Scraper for overtime.ag betting odds."""
 
@@ -550,23 +567,14 @@ class OvertimeScraper:
                     odds = GameOdds(
                         away_team=game["away_team"],
                         home_team=game["home_team"],
-                        # Spreads - both sides (use parse_spread to handle PK and 0)
-                        away_spread=parse_spread(game.get("away_spread")),
-                        away_spread_odds=int(game["away_spread_price"])
-                        if game.get("away_spread_price")
-                        else None,
-                        home_spread=parse_spread(game.get("home_spread")),
-                        home_spread_odds=int(game["home_spread_price"])
-                        if game.get("home_spread_price")
-                        else None,
-                        # Moneylines
-                        home_ml=int(game["home_ml"]) if game.get("home_ml") else None,
-                        away_ml=int(game["away_ml"]) if game.get("away_ml") else None,
-                        # Totals
-                        total=float(game["total"]) if game.get("total") else None,
-                        over_odds=int(game["over_price"]) if game.get("over_price") else None,
-                        under_odds=int(game["under_price"]) if game.get("under_price") else None,
-                        game_time=game.get("game_time"),
+                        market_spread=_parse_spread(game["spread"]),
+                        spread_odds=int(game["spread_price"]) if game["spread_price"] else None,
+                        home_ml=int(game["home_ml"]) if game["home_ml"] else None,
+                        away_ml=int(game["away_ml"]) if game["away_ml"] else None,
+                        total=float(game["total"]) if game["total"] else None,
+                        over_odds=int(game["over_price"]) if game["over_price"] else None,
+                        under_odds=int(game["under_price"]) if game["under_price"] else None,
+                        game_time=game["game_time"],
                     )
                     games.append(odds)
                     print(f"  {odds.away_team} @ {odds.home_team}")
