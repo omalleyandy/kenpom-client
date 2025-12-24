@@ -1,6 +1,33 @@
 {
   "$id": "daily_slate_table",
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DailySlateTable",
+  "description": "Array of game predictions for a single date's slate",
   "type": "array",
-  "items": {"$ref": "daily_slate_row.json"}
+  "items": {
+    "$ref": "daily_slate_row.json"
+  },
+  "uniqueItems": true,
+  "examples": [
+    [
+      {
+        "date": "2025-01-15",
+        "season": 2025,
+        "game_id": "123456",
+        "home": "Duke",
+        "visitor": "North Carolina",
+        "proj_home": 78.5,
+        "proj_visitor": 72.3,
+        "proj_total": 150.8,
+        "proj_margin_home_minus_visitor": 6.2,
+        "win_prob_home": 0.68,
+        "win_prob_visitor": 0.32,
+        "possessions": 68.5,
+        "method": "kenpom_model",
+        "feature_source_home": "ratings:2025-01-15",
+        "feature_source_visitor": "ratings:2025-01-15",
+        "warnings": []
+      }
+    ]
+  ]
 }

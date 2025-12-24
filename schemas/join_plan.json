@@ -1,0 +1,76 @@
+{
+  "join_plan": {
+    "name": "fanmatch_to_team_id",
+    "version": "1.0",
+    "description": "Maps Fanmatch Home/Visitor names to TeamID using Teams endpoint",
+    "steps": [
+      {
+        "step": 1,
+        "action": "fetch_fanmatch",
+        "inputs": { "d": "YYYY-MM-DD" },
+        "outputs": ["games[]"],
+        "cache_key": "fanmatch:{d}"
+      },
+      {
+        "step": 2,
+        "action": "derive_season",
+        "inputs": { "date": "from step 1" },
+        "outputs": ["season"],
+        "logic": "if month >= 11: year + 1 else: year"
+      },
+      {
+        "step": 3,
+        "action": "fetch_teams",
+        "inputs": { "y": "season from step 2" },
+        "outputs": ["teams[]", "name_to_id_map"],
+        "cache_key": "teams:{y}"
+      },
+      {
+        "step": 4,
+        "action": "build_lookup",
+        "inputs": { "teams": "from step 3" },
+        "outputs": ["exact_map", "normalized_map", "alias_map"],
+        "logic": "Create 3-tier lookup: exact → normalized → alias"
+      },
+      {
+        "step": 5,
+        "action": "join_games",
+        "inputs": {
+          "games": "from step 1",
+          "lookup_maps": "from step 4"
+        },
+        "outputs": ["enriched_games[]"],
+        "logic": "For each game, resolve Home→TeamID and Visitor→TeamID"
+      }
+    ],
+    "mismatch_strategy": {
+      "tier_1_exact": "Direct match on TeamName",
+      "tier_2_normalize": "Strip punctuation, lowercase, collapse whitespace",
+      "tier_3_alias": "Known mappings (e.g., 'UConn' → 'Connecticut')",
+      "tier_4_fuzzy": "Levenshtein distance ≤ 2 with warning",
+      "tier_5_fallback": "Set TeamID=null, add warning 'team_not_found:{name}'"
+    },
+    "normalization_rules": [
+      { "rule": "lowercase", "example": "North Carolina → north carolina" },
+      { "rule": "strip_punctuation", "example": "St. Mary's (CA) → st marys ca" },
+      { "rule": "collapse_whitespace", "example": "Miami  (FL) → miami fl" },
+      { "rule": "remove_articles", "example": "The Citadel → citadel" }
+    ],
+    "known_aliases": {
+      "UConn": "Connecticut",
+      "UNC": "North Carolina",
+      "USC": "Southern California",
+      "SMU": "Southern Methodist",
+      "UNLV": "Nevada Las Vegas",
+      "UCF": "Central Florida",
+      "VCU": "Virginia Commonwealth",
+      "BYU": "Brigham Young",
+      "LSU": "Louisiana St.",
+      "Ole Miss": "Mississippi"
+    },
+    "caching": {
+      "fanmatch": { "key": "fanmatch:{d}", "ttl_seconds": 3600 },
+      "teams": { "key": "teams:{y}", "ttl_seconds": 86400 }
+    }
+  }
+}
