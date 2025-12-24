@@ -57,22 +57,6 @@ def _parse_spread(value: str | float | None) -> float | None:
     except ValueError:
         return None
 
-def _parse_spread(value: str | float | None) -> float | None:
-    """Parse spread value, handling PK (pick'em) as 0."""
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    s = str(value).strip().upper()
-    if not s or s == "-":
-        return None
-    if "PK" in s or "PICK" in s or "EVEN" in s:
-        return 0.0
-    try:
-        return float(s.replace("½", ".5"))
-    except ValueError:
-        return None
-
 
 class OvertimeScraper:
     """Scraper for overtime.ag betting odds."""
