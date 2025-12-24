@@ -25,13 +25,19 @@ class GameOdds:
 
     away_team: str
     home_team: str
-    market_spread: Optional[float]  # Home team perspective (neg = favored)
-    spread_odds: Optional[int]  # American odds for spread (usually -110)
+    # Spreads - both sides
+    away_spread: Optional[float]  # Away team spread (e.g., +7.5)
+    away_spread_odds: Optional[int]  # Away spread price (e.g., -110)
+    home_spread: Optional[float]  # Home team spread (e.g., -7.5)
+    home_spread_odds: Optional[int]  # Home spread price (e.g., -110)
+    # Moneylines
     home_ml: Optional[int]  # Home team moneyline
     away_ml: Optional[int]  # Away team moneyline
+    # Totals
     total: Optional[float]  # Over/Under total points
     over_odds: Optional[int]  # Odds for over
     under_odds: Optional[int]  # Odds for under
+    # Metadata
     game_time: Optional[str]  # Game start time
     sport: str = "NCAAB"  # NCAA Men's Basketball
 
@@ -165,47 +171,78 @@ class OvertimeScraper:
             # Wait for page to fully load after login
             page.wait_for_load_state("networkidle", timeout=10000)
 
-            # Try multiple selectors for Basketball section
-            basketball_selectors = [
-                "#img_Basketball",
-                "img[id*='Basketball']",
-                "[id*='Basketball'][class*='sport']",
-                "text=Basketball",
-            ]
+            # Check if Basketball submenu is already expanded
+            # (avoid toggling it closed by clicking again)
+            submenu_visible = False
+            try:
+                submenu = page.locator("#sp_Basketball")
+                submenu_visible = submenu.is_visible(timeout=1000)
+                if submenu_visible:
+                    print("Basketball submenu already expanded")
+            except Exception:
+                pass
 
-            basketball_clicked = False
-            for selector in basketball_selectors:
-                try:
-                    basketball_icon = page.locator(selector).first
-                    if basketball_icon.is_visible(timeout=2000):
-                        basketball_icon.click()
-                        page.wait_for_timeout(1500)
-                        print(f"Clicked Basketball section (selector: {selector})")
-                        basketball_clicked = True
-                        break
-                except Exception:
-                    continue
+            # Only click Basketball if submenu is not visible
+            if not submenu_visible:
+                basketball_selectors = [
+                    "#img_Basketball",
+                    "img[id*='Basketball']",
+                    "[id*='Basketball'][class*='sport']",
+                    "text=Basketball",
+                ]
 
-            if not basketball_clicked:
-                print("WARNING: Could not click Basketball icon, trying direct navigation...")
+                basketball_clicked = False
+                for selector in basketball_selectors:
+                    try:
+                        basketball_icon = page.locator(selector).first
+                        if basketball_icon.is_visible(timeout=2000):
+                            basketball_icon.click()
+                            page.wait_for_timeout(1500)
+                            print(f"Clicked Basketball section (selector: {selector})")
+                            basketball_clicked = True
+                            break
+                    except Exception:
+                        continue
+
+                if not basketball_clicked:
+                    print("WARNING: Could not click Basketball icon, trying direct navigation...")
+
+            # Wait for the Basketball submenu to expand
+            page.wait_for_timeout(1000)
 
             # Multiple selectors for the target section
             if section == "College Extra":
+                # First, check if College Extra even exists in the menu
+                # Use text-based selector as primary (most reliable)
                 college_selectors = [
-                    "#sp_Basketball > div > ul > li:nth-child(3) > div > label",
-                    "label[for='gl_Basketball_College_Extra_G']",
                     "label:has-text('College Extra')",
                     "text=College Extra",
-                    "[ng-click*='College_Extra']",
+                    "label[for='gl_Basketball_College_Extra_G']",
+                    "#sp_Basketball label:has-text('Extra')",
+                    # Try various nth-child positions (menu order varies)
+                    "#sp_Basketball > div > ul > li:nth-child(3) > div > label",
+                    "#sp_Basketball > div > ul > li:nth-child(4) > div > label",
+                    "#sp_Basketball > div > ul > li:nth-child(5) > div > label",
                 ]
             else:
                 college_selectors = [
-                    "#sp_Basketball > div > ul > li:nth-child(2) > div > label",
-                    "label[for='gl_Basketball_College_Basketball_G']",
                     "label:has-text('College Basketball')",
                     "text=College Basketball",
-                    "[ng-click*='College_Basketball']",
+                    "label[for='gl_Basketball_College_Basketball_G']",
+                    "#sp_Basketball > div > ul > li:nth-child(2) > div > label",
                 ]
+
+            # Debug: Print available menu items
+            try:
+                menu_items = page.evaluate("""
+                    () => {
+                        const items = document.querySelectorAll('#sp_Basketball label');
+                        return Array.from(items).map(l => l.textContent.trim());
+                    }
+                """)
+                print(f"Available Basketball menu items: {menu_items}")
+            except Exception:
+                pass
 
             for selector in college_selectors:
                 try:
@@ -220,7 +257,9 @@ class OvertimeScraper:
                         print(f"Navigated to {section} (selector: {selector})")
                         return True
                 except Exception as e:
-                    print(f"Selector {selector} failed: {e}")
+                    # Only log failures for text-based selectors (reduce noise)
+                    if "nth-child" not in selector:
+                        print(f"Selector {selector} failed: {e}")
                     continue
 
             # Save debug screenshot on failure
@@ -274,9 +313,13 @@ class OvertimeScraper:
                         function parseOdds(text) {
                             if (!text || text === '-') return { value: null, price: null };
                             // Handle PK (pick'em) - spread is 0
-                            if (text.includes('PK') || text.toLowerCase().includes('pick') || text.includes('EVEN')) {
-                                const priceMatch = text.match(/(-?\\d+)/);
-                                return { value: '0', price: priceMatch ? priceMatch[1] : null };
+                            // Format: "PK  -110" or just "PK"
+                            const pkMatch = text.match(/PK\\s*(-?\\d+)?/i);
+                            if (pkMatch) {
+                                return {
+                                    value: '0',
+                                    price: pkMatch[1] || null
+                                };
                             }
                             // Handle spread/ML: "+22  -111" or "-600"
                             const match = text.match(/([+-]?[\\d½.]+)\\s+(-?\\d+)/);
@@ -324,10 +367,15 @@ class OvertimeScraper:
                         const game = {
                             away_team: awayTeam,
                             home_team: homeTeam,
-                            spread: homeSpread.value,
-                            spread_price: homeSpread.price,
+                            // Spreads - both sides
+                            away_spread: awaySpread.value,
+                            away_spread_price: awaySpread.price,
+                            home_spread: homeSpread.value,
+                            home_spread_price: homeSpread.price,
+                            // Moneylines
                             away_ml: awayML.value ? parseInt(awayML.value) : null,
                             home_ml: homeML.value ? parseInt(homeML.value) : null,
+                            // Totals
                             total: overTotal.value || underTotal.value,
                             over_price: overTotal.price,
                             under_price: underTotal.price,
@@ -464,10 +512,15 @@ class OvertimeScraper:
                                         games.push({
                                             away_team: gl.Team1ID,
                                             home_team: gl.Team2ID,
-                                            spread: gl.Spread2,
-                                            spread_price: gl.SpreadPrice2,
+                                            // Spreads - both sides
+                                            away_spread: gl.Spread1,
+                                            away_spread_price: gl.SpreadPrice1,
+                                            home_spread: gl.Spread2,
+                                            home_spread_price: gl.SpreadPrice2,
+                                            // Moneylines
                                             away_ml: gl.MoneyLine1,
                                             home_ml: gl.MoneyLine2,
+                                            // Totals
                                             total: gl.Total,
                                             over_price: gl.TotalPrice1,
                                             under_price: gl.TotalPrice2,
@@ -490,6 +543,23 @@ class OvertimeScraper:
                 print("\nAngular extraction failed. Trying DOM-based extraction...")
                 game_data = self._extract_from_dom(page)
                 print(f"Extracted {len(game_data)} games from DOM")
+
+            # Helper to parse spread values (handles PK=0 and explicit 0 values)
+            def parse_spread(value) -> Optional[float]:
+                if value is None:
+                    return None
+                # Handle "PK" (pick'em) - spread is 0
+                if isinstance(value, str):
+                    if value.upper() == "PK":
+                        return 0.0
+                    try:
+                        return float(value)
+                    except ValueError:
+                        return None
+                # Handle numeric 0 (don't treat as falsy)
+                if isinstance(value, (int, float)):
+                    return float(value)
+                return None
 
             # Convert to GameOdds objects
             for game in game_data:
@@ -525,9 +595,14 @@ class OvertimeScraper:
             include_extra: If True, also scrape "College Extra" section
 
         Returns:
-            DataFrame with columns: away_team, home_team, market_spread,
-            spread_odds, home_ml, away_ml, total, over_odds, under_odds,
-            game_time
+            DataFrame with columns:
+            - away_team, home_team: Team names
+            - away_spread, away_spread_odds: Away team spread and price
+            - home_spread, home_spread_odds: Home team spread and price
+            - away_ml, home_ml: Moneyline odds
+            - total, over_odds, under_odds: Total and prices
+            - game_time: Game start time
+            - sport: Sport identifier (NCAAB)
         """
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=self.headless)
