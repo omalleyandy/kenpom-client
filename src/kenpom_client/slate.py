@@ -64,6 +64,9 @@ OVERTIME_TO_KENPOM: Dict[str, str] = {
     "App State": "Appalachian St.",
     "Appalachian State": "Appalachian St.",
     "St. Johns": "St. John's",
+    # Apostrophe variants
+    "St. Johns": "St. John's",
+    # State -> St. abbreviations
     "Morgan State": "Morgan St.",
 }
 
