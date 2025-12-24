@@ -220,7 +220,11 @@ kenpom-client/
 │   ├── http.py               # Rate limiting & retries
 │   └── exceptions.py         # Custom exceptions
 ├── docs/
-│   └── ODDS_WORKFLOW.md      # Automated odds fetching guide
+│   ├── ODDS_WORKFLOW.md      # Automated odds fetching guide
+│   └── DAILY_SLATE_API.md    # Daily slate output contract
+├── schemas/
+│   ├── daily_slate_row.json  # Single prediction schema
+│   └── daily_slate_table.json # Full table schema
 ├── fetch_odds_scheduled.bat  # Windows scheduled task script
 ├── setup_task_xml.ps1        # Task Scheduler setup
 ├── .mcp.json                 # MCP server configuration
@@ -271,6 +275,15 @@ client.close()
 | FanMatch | `fanmatch(d)` | Game predictions and spreads |
 | Teams | `teams(y, c)` | Team rosters with arena info |
 | Conferences | `conferences(y)` | Conference metadata |
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/ODDS_WORKFLOW.md](docs/ODDS_WORKFLOW.md) | Automated odds fetching workflow |
+| [docs/DAILY_SLATE_API.md](docs/DAILY_SLATE_API.md) | Daily slate output contract |
+| [schemas/daily_slate_row.json](schemas/daily_slate_row.json) | JSON Schema: single prediction |
+| [schemas/daily_slate_table.json](schemas/daily_slate_table.json) | JSON Schema: prediction array |
 
 ## Development
 

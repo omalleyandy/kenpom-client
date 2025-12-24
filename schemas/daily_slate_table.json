@@ -1,0 +1,6 @@
+{
+  "$id": "daily_slate_table",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {"$ref": "daily_slate_row.json"}
+}
