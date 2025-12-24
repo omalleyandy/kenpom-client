@@ -173,7 +173,7 @@ def fanmatch_slate_table(
     Returns:
         DataFrame with game projections, sorted by absolute margin
     """
-    c = client or KenPomClient.from_env()
+    c = client or KenPomClient(Settings.from_env())
     close_client = client is None
 
     try:
