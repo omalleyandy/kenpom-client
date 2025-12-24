@@ -36,6 +36,23 @@ class GameOdds:
     sport: str = "NCAAB"  # NCAA Men's Basketball
 
 
+def _parse_spread(value: str | float | None) -> float | None:
+    """Parse spread value, handling PK (pick'em) as 0."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().upper()
+    if not s or s == "-":
+        return None
+    if "PK" in s or "PICK" in s or "EVEN" in s:
+        return 0.0
+    try:
+        return float(s.replace("½", ".5"))
+    except ValueError:
+        return None
+
+
 class OvertimeScraper:
     """Scraper for overtime.ag betting odds."""
 
@@ -256,6 +273,11 @@ class OvertimeScraper:
                         // Helper to parse odds like "+22  -111" or "O 146 -112"
                         function parseOdds(text) {
                             if (!text || text === '-') return { value: null, price: null };
+                            // Handle PK (pick'em) - spread is 0
+                            if (text.includes('PK') || text.toLowerCase().includes('pick') || text.includes('EVEN')) {
+                                const priceMatch = text.match(/(-?\\d+)/);
+                                return { value: '0', price: priceMatch ? priceMatch[1] : null };
+                            }
                             // Handle spread/ML: "+22  -111" or "-600"
                             const match = text.match(/([+-]?[\\d½.]+)\\s+(-?\\d+)/);
                             if (match) {
@@ -475,7 +497,7 @@ class OvertimeScraper:
                     odds = GameOdds(
                         away_team=game["away_team"],
                         home_team=game["home_team"],
-                        market_spread=float(game["spread"]) if game["spread"] else None,
+                        market_spread=_parse_spread(game["spread"]),
                         spread_odds=int(game["spread_price"]) if game["spread_price"] else None,
                         home_ml=int(game["home_ml"]) if game["home_ml"] else None,
                         away_ml=int(game["away_ml"]) if game["away_ml"] else None,
