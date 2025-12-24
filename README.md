@@ -219,12 +219,31 @@ kenpom-client/
 │   ├── cache.py              # File-based caching
 │   ├── http.py               # Rate limiting & retries
 │   └── exceptions.py         # Custom exceptions
-├── docs/
+├── docs/                     # API documentation
+│   ├── _index.md             # Documentation index
+│   ├── ratings.md            # Ratings endpoint
+│   ├── ratings_archive.md    # Archive endpoint
+│   ├── fanmatch.md           # FanMatch endpoint
+│   ├── four_factors.md       # Four Factors endpoint
+│   ├── height.md             # Height endpoint
+│   ├── misc_stats.md         # Misc Stats endpoint
+│   ├── point_distribution.md # Point Distribution endpoint
+│   ├── teams.md              # Teams endpoint
+│   ├── conferences.md        # Conferences endpoint
 │   ├── ODDS_WORKFLOW.md      # Automated odds fetching guide
 │   └── DAILY_SLATE_API.md    # Daily slate output contract
-├── schemas/
-│   ├── daily_slate_row.json  # Single prediction schema
-│   └── daily_slate_table.json # Full table schema
+├── schemas/                  # JSON Schemas
+│   ├── ratings.schema.json
+│   ├── ratings_archive.schema.json
+│   ├── fanmatch.schema.json
+│   ├── four_factors.schema.json
+│   ├── height.schema.json
+│   ├── misc_stats.schema.json
+│   ├── point_distribution.schema.json
+│   ├── teams.schema.json
+│   ├── conferences.schema.json
+│   ├── daily_slate_row.json
+│   └── daily_slate_table.json
 ├── fetch_odds_scheduled.bat  # Windows scheduled task script
 ├── setup_task_xml.ps1        # Task Scheduler setup
 ├── .mcp.json                 # MCP server configuration
@@ -278,12 +297,29 @@ client.close()
 
 ## Documentation
 
+Full API documentation and JSON schemas are available in the `docs/` and `schemas/` directories.
+
+**API Endpoints**: See [docs/_index.md](docs/_index.md) for the complete documentation index.
+
+| Endpoint | Docs | Schema |
+|----------|------|--------|
+| Ratings | [ratings.md](docs/ratings.md) | [ratings.schema.json](schemas/ratings.schema.json) |
+| Archive | [ratings_archive.md](docs/ratings_archive.md) | [ratings_archive.schema.json](schemas/ratings_archive.schema.json) |
+| FanMatch | [fanmatch.md](docs/fanmatch.md) | [fanmatch.schema.json](schemas/fanmatch.schema.json) |
+| Four Factors | [four_factors.md](docs/four_factors.md) | [four_factors.schema.json](schemas/four_factors.schema.json) |
+| Height | [height.md](docs/height.md) | [height.schema.json](schemas/height.schema.json) |
+| Misc Stats | [misc_stats.md](docs/misc_stats.md) | [misc_stats.schema.json](schemas/misc_stats.schema.json) |
+| Point Dist | [point_distribution.md](docs/point_distribution.md) | [point_distribution.schema.json](schemas/point_distribution.schema.json) |
+| Teams | [teams.md](docs/teams.md) | [teams.schema.json](schemas/teams.schema.json) |
+| Conferences | [conferences.md](docs/conferences.md) | [conferences.schema.json](schemas/conferences.schema.json) |
+
+**Workflows & Contracts**:
 | Document | Description |
 |----------|-------------|
-| [docs/ODDS_WORKFLOW.md](docs/ODDS_WORKFLOW.md) | Automated odds fetching workflow |
-| [docs/DAILY_SLATE_API.md](docs/DAILY_SLATE_API.md) | Daily slate output contract |
-| [schemas/daily_slate_row.json](schemas/daily_slate_row.json) | JSON Schema: single prediction |
-| [schemas/daily_slate_table.json](schemas/daily_slate_table.json) | JSON Schema: prediction array |
+| [ODDS_WORKFLOW.md](docs/ODDS_WORKFLOW.md) | Automated odds fetching workflow |
+| [DAILY_SLATE_API.md](docs/DAILY_SLATE_API.md) | Daily slate output contract |
+| [daily_slate_row.json](schemas/daily_slate_row.json) | JSON Schema: single prediction |
+| [daily_slate_table.json](schemas/daily_slate_table.json) | JSON Schema: prediction array |
 
 ## Development
 
