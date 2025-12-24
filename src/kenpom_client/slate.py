@@ -63,6 +63,7 @@ OVERTIME_TO_KENPOM: Dict[str, str] = {
     "Arizona St": "Arizona St.",
     "App State": "Appalachian St.",
     "Appalachian State": "Appalachian St.",
+    "St. Johns": "St. John's",
     # Apostrophe variants
     "St. Johns": "St. John's",
     # State -> St. abbreviations
@@ -71,9 +72,13 @@ OVERTIME_TO_KENPOM: Dict[str, str] = {
 
 
 def normalize_team_name(name: str) -> str:
-    """Normalize team name from Overtime format to KenPom format."""
     if name in OVERTIME_TO_KENPOM:
         return OVERTIME_TO_KENPOM[name]
+    # Suffix normalization
+    if name.endswith(" State") and not name.endswith(" St."):
+        candidate = name.replace(" State", " St.")
+        if candidate != name:
+            return candidate
     return name
 
 
