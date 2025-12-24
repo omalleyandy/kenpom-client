@@ -128,7 +128,9 @@ class PipelineValidator:
     EDGE_ERROR_THRESHOLD = 12.0
 
     # Required columns for each output type
-    ODDS_REQUIRED_COLS = ["away_team", "home_team", "market_spread"]
+    # Note: spread column can be either "market_spread" (old) or "home_spread" (new)
+    ODDS_REQUIRED_COLS = ["away_team", "home_team"]  # spread checked separately
+    ODDS_SPREAD_COLS = ["market_spread", "home_spread"]  # either is acceptable
     ODDS_OPTIONAL_COLS = ["spread_odds", "home_ml", "away_ml", "total", "game_time"]
 
     PREDICTIONS_REQUIRED_COLS = [
@@ -213,32 +215,37 @@ class PipelineValidator:
             issues.append(f"Missing required columns: {missing_cols}")
             return ValidationResult(passed=False, issues=issues, stats=stats)
 
+        # Check for spread column (either old or new format)
+        spread_col = None
+        for col in self.ODDS_SPREAD_COLS:
+            if col in df.columns:
+                spread_col = col
+                break
+        if spread_col is None:
+            issues.append(f"Missing spread column (need one of: {self.ODDS_SPREAD_COLS})")
+            return ValidationResult(passed=False, issues=issues, stats=stats)
+
         # Count games with spread
-        if "market_spread" in df.columns:
-            valid_spreads = df["market_spread"].notna()
-            stats["games_with_spread"] = int(valid_spreads.sum())
+        valid_spreads = df[spread_col].notna()
+        stats["games_with_spread"] = int(valid_spreads.sum())
 
         # Count games with moneyline
         if "home_ml" in df.columns and "away_ml" in df.columns:
             valid_ml = df["home_ml"].notna() & df["away_ml"].notna()
             stats["games_with_ml"] = int(valid_ml.sum())
 
-        # Check spread bounds
-        if "market_spread" in df.columns:
-            out_of_bounds = df[
-                (df["market_spread"].notna())
-                & (
-                    (df["market_spread"] < self.SPREAD_MIN)
-                    | (df["market_spread"] > self.SPREAD_MAX)
+        # Check spread bounds (using whichever spread column exists)
+        out_of_bounds = df[
+            (df[spread_col].notna())
+            & ((df[spread_col] < self.SPREAD_MIN) | (df[spread_col] > self.SPREAD_MAX))
+        ]
+        stats["spreads_out_of_bounds"] = len(out_of_bounds)
+        if len(out_of_bounds) > 0:
+            for _, row in out_of_bounds.iterrows():
+                issues.append(
+                    f"Spread out of bounds ({row[spread_col]:.1f}): "
+                    f"{row['away_team']} @ {row['home_team']}"
                 )
-            ]
-            stats["spreads_out_of_bounds"] = len(out_of_bounds)
-            if len(out_of_bounds) > 0:
-                for _, row in out_of_bounds.iterrows():
-                    issues.append(
-                        f"Spread out of bounds ({row['market_spread']:.1f}): "
-                        f"{row['away_team']} @ {row['home_team']}"
-                    )
 
         # Check vig on moneylines
         if "home_ml" in df.columns and "away_ml" in df.columns:
