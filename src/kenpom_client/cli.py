@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from .client import KenPomClient
 from .config import Settings
+from .slate import fanmatch_slate_table, join_with_odds, validate_backtest
 from .snapshot import build_snapshot_from_archive, build_snapshot_from_ratings
 
 log = logging.getLogger(__name__)
@@ -118,6 +119,34 @@ def main() -> None:
     p_fan = sub.add_parser("fanmatch", help="Fetch KenPom game predictions for a date")
     p_fan.add_argument("--date", type=str, required=True, help="YYYY-MM-DD")
 
+    # Slate table (projections with optional odds join)
+    p_slate = sub.add_parser(
+        "slate", help="Build projection slate table with model scores and optional odds"
+    )
+    p_slate.add_argument("--date", type=str, required=True, help="YYYY-MM-DD")
+    p_slate.add_argument(
+        "--backtest",
+        action="store_true",
+        help="Use archive features (time-correct for backtesting)",
+    )
+    p_slate.add_argument(
+        "--join-odds",
+        action="store_true",
+        help="Join with market odds from overtime_ncaab_odds_{date}.csv",
+    )
+    p_slate.add_argument(
+        "--home-adv",
+        type=float,
+        default=3.0,
+        help="Home court advantage in points (default: 3.0)",
+    )
+    p_slate.add_argument(
+        "--k",
+        type=float,
+        default=11.0,
+        help="Sigmoid scale for win probability (default: 11.0)",
+    )
+
     # Advanced stats
     p_ff = sub.add_parser("fourfactors", help="Fetch Four Factors data for a season")
     p_ff.add_argument("--y", type=int, required=True, help="Season year")
@@ -212,6 +241,53 @@ def main() -> None:
             data = client.fanmatch(d=args.date)
             df = pd.DataFrame([g.model_dump() for g in data])
             _write_outputs(df, out_dir / f"kenpom_predictions_{args.date}")
+
+        elif args.cmd == "slate":
+            # Build slate with optional backtest mode
+            use_archive = args.backtest
+            df = fanmatch_slate_table(
+                d=args.date,
+                k=args.k,
+                home_adv=args.home_adv,
+                use_archive=use_archive,
+                archive_fallback_to_ratings=True,
+                client=client,
+            )
+
+            if df.empty:
+                print(f"No games found for {args.date}")
+                return
+
+            # Validate backtest mode if enabled
+            if use_archive:
+                warnings = validate_backtest(df, args.date)
+                if warnings:
+                    print("BACKTEST VALIDATION WARNINGS:")
+                    for w in warnings:
+                        print(f"  - {w}")
+                else:
+                    print("Backtest validation: PASSED (all features time-correct)")
+
+            # Join with odds if requested
+            if args.join_odds:
+                df = join_with_odds(df, odds_date=args.date)
+                joined_count = df["odds_joined"].sum() if "odds_joined" in df.columns else 0
+                print(f"Joined odds for {joined_count}/{len(df)} games")
+
+            # Determine output filename
+            suffix = "_backtest" if use_archive else ""
+            suffix += "_with_odds" if args.join_odds else ""
+            filename = f"kenpom_slate_{args.date}{suffix}"
+            _write_outputs(df, out_dir / filename)
+
+            # Summary
+            print(f"\nSlate summary for {args.date}:")
+            print(f"  Games: {len(df)}")
+            print(f"  Method: {'archive (backtest)' if use_archive else 'ratings (live)'}")
+            if "spread_edge" in df.columns:
+                edges = df["spread_edge"].dropna()
+                if len(edges) > 0:
+                    print(f"  Avg spread edge: {edges.mean():+.1f} pts")
 
         elif args.cmd == "fourfactors":
             data = client.four_factors(y=args.y)
