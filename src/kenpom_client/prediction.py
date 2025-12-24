@@ -8,6 +8,7 @@ Key Features:
 - Baseline model: Simple margin = home_adj_em - away_adj_em + 3.5
 - Enhanced model: Baseline + heuristic adjustments (±2 pts max)
 - Game-specific sigma: Additive variance model with interaction terms
+- Score projection: Individual team scores using OE/DE crossover
 - ML-ready architecture: Coefficients replaceable for machine learning
 """
 
@@ -15,15 +16,155 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import pandas as pd
 
 from kenpom_client.matchup import MatchupFeatures
+from kenpom_client.models import ArchiveRating, Rating
 
 # Default home court advantage in college basketball (points)
 # This is used as a fallback when team-specific HCA data is not available
 DEFAULT_HOME_COURT_ADVANTAGE = 3.5
+
+# Default sigmoid scaling factor for win probability
+# At k=11, a 10-point favorite has ~71% win probability
+# Lower k = sharper probabilities, higher k = more conservative
+DEFAULT_SIGMOID_K = 11.0
+
+
+# =============================================================================
+# Score Projection (Individual Team Scores)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ScoreProjection:
+    """Projected scores for a game using OE/DE crossover method.
+
+    Uses the algorithm:
+    1. poss = avg(tempo_home, tempo_visitor)
+    2. E_home = avg(OE_home, DE_visitor)
+    3. E_visitor = avg(OE_visitor, DE_home)
+    4. score = poss * E / 100 ± home_adv/2
+
+    All fields from home team perspective.
+    """
+
+    proj_home: float  # Projected home team score
+    proj_visitor: float  # Projected visitor score
+    proj_total: float  # proj_home + proj_visitor
+    proj_margin: float  # proj_home - proj_visitor (positive = home favored)
+    possessions: float  # Expected game possessions
+    win_prob_home: float  # sigmoid(margin/k)
+    win_prob_visitor: float  # 1 - win_prob_home
+    home_adv: float  # HCA value used
+    k: float  # Sigmoid k value used
+    method: str  # "ratings" or "archive"
+    feature_source: str  # Source identifier for the ratings data
+
+
+def sigmoid_winprob(margin: float, k: float = DEFAULT_SIGMOID_K) -> float:
+    """Calculate win probability using sigmoid function.
+
+    Formula: p = 1 / (1 + exp(-margin / k))
+
+    Args:
+        margin: Point spread (positive = home favored)
+        k: Scaling factor (default 11.0)
+
+    Returns:
+        Win probability for home team [0, 1]
+
+    Example:
+        >>> sigmoid_winprob(10.0)  # 10-point favorite
+        0.7109...
+        >>> sigmoid_winprob(0.0)   # Even game
+        0.5
+    """
+    return 1.0 / (1.0 + math.exp(-margin / k))
+
+
+def project_scores(
+    home: Union[Rating, ArchiveRating],
+    visitor: Union[Rating, ArchiveRating],
+    home_adv: float = DEFAULT_HOME_COURT_ADVANTAGE,
+    k: float = DEFAULT_SIGMOID_K,
+    feature_source: Optional[str] = None,
+) -> ScoreProjection:
+    """Project individual team scores using OE/DE crossover method.
+
+    Implements the algorithm from PROJECTION_MODEL_SPEC.md:
+    1. poss = (AdjTempo_home + AdjTempo_visitor) / 2
+    2. E_home = (AdjOE_home + AdjDE_visitor) / 2
+    3. E_visitor = (AdjOE_visitor + AdjDE_home) / 2
+    4. raw_score = poss * E / 100
+    5. Apply HCA split evenly across scores
+
+    Args:
+        home: Home team Rating or ArchiveRating
+        visitor: Visitor team Rating or ArchiveRating
+        home_adv: Home court advantage in points (default 3.5)
+        k: Sigmoid scaling factor for win probability (default 11.0)
+        feature_source: Optional source identifier (e.g., "archive:2024-03-14")
+
+    Returns:
+        ScoreProjection with projected scores, margin, total, and win probability
+
+    Example:
+        >>> from kenpom_client.client import KenPomClient
+        >>> client = KenPomClient(settings)
+        >>> ratings = client.ratings(y=2025)
+        >>> duke = next(r for r in ratings if "Duke" in r.TeamName)
+        >>> unc = next(r for r in ratings if "North Carolina" in r.TeamName)
+        >>> proj = project_scores(duke, unc)
+        >>> print(f"{proj.proj_home:.1f} - {proj.proj_visitor:.1f}")
+    """
+    # Step 1: Compute possessions
+    poss = (home.AdjTempo + visitor.AdjTempo) / 2.0
+
+    # Step 2: Compute expected efficiencies (OE/DE crossover)
+    e_home = (home.AdjOE + visitor.AdjDE) / 2.0
+    e_visitor = (visitor.AdjOE + home.AdjDE) / 2.0
+
+    # Step 3: Compute raw scores (neutral site)
+    raw_home = poss * e_home / 100.0
+    raw_visitor = poss * e_visitor / 100.0
+
+    # Step 4: Apply home court adjustment (split evenly)
+    proj_home = raw_home + (home_adv / 2.0)
+    proj_visitor = raw_visitor - (home_adv / 2.0)
+
+    # Step 5: Compute derived outputs
+    proj_total = proj_home + proj_visitor
+    proj_margin = proj_home - proj_visitor
+
+    # Step 6: Compute win probability
+    win_prob_home = sigmoid_winprob(proj_margin, k)
+    win_prob_visitor = 1.0 - win_prob_home
+
+    # Determine method and feature source
+    method = "archive" if isinstance(home, ArchiveRating) else "ratings"
+    if feature_source is None:
+        if isinstance(home, ArchiveRating):
+            feature_source = f"archive:{home.ArchiveDate}"
+        else:
+            feature_source = f"ratings:{home.DataThrough}"
+
+    return ScoreProjection(
+        proj_home=proj_home,
+        proj_visitor=proj_visitor,
+        proj_total=proj_total,
+        proj_margin=proj_margin,
+        possessions=poss,
+        win_prob_home=win_prob_home,
+        win_prob_visitor=win_prob_visitor,
+        home_adv=home_adv,
+        k=k,
+        method=method,
+        feature_source=feature_source,
+    )
+
 
 # Heuristic coefficients for enhanced margin model
 # Research-based conservative adjustments (±2 pts max total)
