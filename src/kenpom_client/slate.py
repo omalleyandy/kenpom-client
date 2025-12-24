@@ -63,13 +63,19 @@ OVERTIME_TO_KENPOM: Dict[str, str] = {
     "Arizona St": "Arizona St.",
     "App State": "Appalachian St.",
     "Appalachian State": "Appalachian St.",
+    "St. Johns": "St. John's",
+    "Morgan State": "Morgan St.",
 }
 
 
 def normalize_team_name(name: str) -> str:
-    """Normalize team name from Overtime format to KenPom format."""
     if name in OVERTIME_TO_KENPOM:
         return OVERTIME_TO_KENPOM[name]
+    # Suffix normalization
+    if name.endswith(" State") and not name.endswith(" St."):
+        candidate = name.replace(" State", " St.")
+        if candidate != name:
+            return candidate
     return name
 
 
@@ -399,7 +405,7 @@ def join_with_odds(
 
     # Merge on normalized names
     merged = slate_df.merge(
-        odds_df[["home_norm", "away_norm", "market_spread", "spread_odds",
+        odds_df[["home_norm", "away_norm", "home_spread", "home_spread_odds",
                  "home_ml", "away_ml", "total", "over_odds", "under_odds", "game_time"]],
         left_on=["home_norm", "visitor_norm"],
         right_on=["home_norm", "away_norm"],
@@ -409,7 +415,8 @@ def join_with_odds(
 
     # Rename odds columns for clarity
     merged = merged.rename(columns={
-        "market_spread": "odds_spread",
+        "home_spread": "odds_spread",
+        "home_spread_odds": "odds_spread_odds",
         "total": "odds_total",
         "home_ml": "odds_home_ml",
         "away_ml": "odds_away_ml",
