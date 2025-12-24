@@ -33,6 +33,7 @@ from .client import KenPomClient
 from .config import Settings
 from .effort import EffortLevel, classify_effort
 from .prediction import DEFAULT_HOME_COURT_ADVANTAGE, DEFAULT_SIGMOID_K, project_scores
+from .slate import DEFAULT_HOME_ADV, DEFAULT_K, fanmatch_slate_table, join_with_odds
 
 # Load environment variables
 load_dotenv()
@@ -166,6 +167,13 @@ TOOL_METADATA: dict[str, ToolMetadata] = {
         name="kenpom_project",
         effort_level=EffortLevel.MEDIUM,
         description="Project game scores using efficiency model",
+        is_read_only=True,
+        requires_reasoning=True,
+    ),
+    "kenpom_slate": ToolMetadata(
+        name="kenpom_slate",
+        effort_level=EffortLevel.MEDIUM,
+        description="Build full slate projection table with optional odds join",
         is_read_only=True,
         requires_reasoning=True,
     ),
@@ -496,6 +504,39 @@ async def list_tools() -> list[Tool]:
                 "required": ["home_team", "visitor_team"],
             },
         ),
+        # Slate table tool
+        Tool(
+            name="kenpom_slate",
+            description="Build full projection slate table for a date. "
+            "Returns all games with projected scores, margins, win probabilities, and optional market odds. "
+            "Use backtest=true for time-correct archive features.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "game_date": {
+                        "type": "string",
+                        "description": "Date in YYYY-MM-DD format (default: today)",
+                    },
+                    "backtest": {
+                        "type": "boolean",
+                        "description": "Use archive features for time-correct backtesting (default: false)",
+                    },
+                    "join_odds": {
+                        "type": "boolean",
+                        "description": "Join with market odds if available (default: false)",
+                    },
+                    "home_adv": {
+                        "type": "number",
+                        "description": f"Home court advantage in points (default: {DEFAULT_HOME_ADV})",
+                    },
+                    "k": {
+                        "type": "number",
+                        "description": f"Sigmoid scaling factor for win probability (default: {DEFAULT_K})",
+                    },
+                },
+                "required": [],
+            },
+        ),
         # Meta tools for effort classification
         Tool(
             name="classify_effort",
@@ -774,6 +815,73 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                     f"  Method: {proj.method}",
                     f"  Source: {proj.feature_source}",
                 ]
+                result = "\n".join(lines)
+
+        elif name == "kenpom_slate":
+            game_date = arguments.get("game_date", date.today().isoformat())
+            backtest = arguments.get("backtest", False)
+            do_join_odds = arguments.get("join_odds", False)
+            home_adv = arguments.get("home_adv", DEFAULT_HOME_ADV)
+            k_val = arguments.get("k", DEFAULT_K)
+
+            df = fanmatch_slate_table(
+                d=game_date,
+                k=k_val,
+                home_adv=home_adv,
+                use_archive=backtest,
+                archive_fallback_to_ratings=True,
+                client=client,
+            )
+
+            if df.empty:
+                result = f"No games found for {game_date}"
+            else:
+                # Join odds if requested
+                if do_join_odds:
+                    df = join_with_odds(df, odds_date=game_date)
+
+                # Format output
+                lines = [
+                    f"SLATE TABLE: {game_date}",
+                    f"Mode: {'Backtest (archive)' if backtest else 'Live (ratings)'}",
+                    f"Games: {len(df)}",
+                    "=" * 70,
+                    "",
+                ]
+
+                # Column subset for display
+                display_cols = ["visitor", "home", "proj_margin", "proj_total",
+                                "win_prob_home", "feature_source_home"]
+                if do_join_odds and "odds_spread" in df.columns:
+                    display_cols.extend(["odds_spread", "spread_edge"])
+
+                for _, row in df.iterrows():
+                    margin = row.get("proj_margin", 0)
+                    wp = row.get("win_prob_home", 0.5)
+                    line = f"{row['visitor']} @ {row['home']}: "
+                    line += f"Margin {margin:+.1f}, Total {row.get('proj_total', 0):.1f}, "
+                    line += f"WP {wp:.0%}"
+
+                    if do_join_odds and "odds_spread" in row and row.get("odds_joined"):
+                        odds_spread = row.get("odds_spread", 0)
+                        edge = row.get("spread_edge", 0)
+                        line += f" | Mkt {odds_spread:+.1f}, Edge {edge:+.1f}"
+
+                    # Add warning indicator
+                    if row.get("warnings"):
+                        line += " [!]"
+
+                    lines.append(line)
+
+                # Summary stats
+                if do_join_odds and "spread_edge" in df.columns:
+                    edges = df["spread_edge"].dropna()
+                    if len(edges) > 0:
+                        lines.append("")
+                        lines.append(f"Avg Edge: {edges.mean():+.1f} | "
+                                     f"Max Edge: {edges.max():+.1f} | "
+                                     f"Odds Joined: {df['odds_joined'].sum()}/{len(df)}")
+
                 result = "\n".join(lines)
 
         elif name == "classify_effort":
