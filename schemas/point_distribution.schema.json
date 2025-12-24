@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KenPom Point Distribution Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "DataThrough": {
+        "description": "Date through which data is current",
+        "type": "string"
+      },
+      "ConfOnly": {
+        "description": "Whether this is conference-only data (\"true\" or \"false\")",
+        "type": "string"
+      },
+      "Season": {
+        "description": "Ending year of the season",
+        "type": "integer"
+      },
+      "TeamName": {
+        "description": "Team name",
+        "type": "string"
+      },
+      "ConfShort": {
+        "description": "Conference abbreviation",
+        "type": "string"
+      },
+      "OffFT": {
+        "description": "% of points from free throws (offense)",
+        "type": "number"
+      },
+      "OffFG2": {
+        "description": "% of points from 2PT FGs (offense)",
+        "type": "number"
+      },
+      "OffFG3": {
+        "description": "% of points from 3PT FGs (offense)",
+        "type": "number"
+      },
+      "DefFT": {
+        "description": "% of points allowed from free throws (defense)",
+        "type": "number"
+      },
+      "DefFG2": {
+        "description": "% of points allowed from 2PT FGs (defense)",
+        "type": "number"
+      },
+      "DefFG3": {
+        "description": "% of points allowed from 3PT FGs (defense)",
+        "type": "number"
+      }
+    },
+    "additionalProperties": true
+  }
+}

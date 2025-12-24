@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KenPom Conferences Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "Season": {
+        "description": "Ending year of the season",
+        "type": "integer"
+      },
+      "ConfID": {
+        "description": "Unique conference identifier",
+        "type": "integer"
+      },
+      "ConfShort": {
+        "description": "Conference short name",
+        "type": "string"
+      },
+      "ConfLong": {
+        "description": "Conference full name",
+        "type": "string"
+      }
+    },
+    "additionalProperties": true
+  }
+}

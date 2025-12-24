@@ -1,0 +1,29 @@
+{
+  "$id": "daily_slate_row",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["date","season","game_id","home","visitor","proj_home","proj_visitor","proj_total","proj_margin_home_minus_visitor","win_prob_home","win_prob_visitor","possessions","method","feature_source_home","feature_source_visitor","warnings"],
+  "properties": {
+    "date": {"type":"string","format":"date"},
+    "season": {"type":"integer","minimum":2000,"maximum":2100},
+    "game_id": {"type":"string"},
+    "home": {"type":"string"},
+    "visitor": {"type":"string"},
+    "proj_home": {"type":"number"},
+    "proj_visitor": {"type":"number"},
+    "proj_total": {"type":"number"},
+    "proj_margin_home_minus_visitor": {"type":"number"},
+    "win_prob_home": {"type":"number","minimum":0,"maximum":1},
+    "win_prob_visitor": {"type":"number","minimum":0,"maximum":1},
+    "possessions": {"type":"number"},
+    "method": {"type":"string","enum":["fanmatch","kenpom_model","archive_backtest"]},
+    "feature_source_home": {"type":"string"},
+    "feature_source_visitor": {"type":"string"},
+    "warnings": {"type":"array","items":{"type":"string"}},
+    "fanmatch_raw_margin": {"type":"number"},
+    "fanmatch_raw_total": {"type":"number"},
+    "fanmatch_hca_applied": {"type":"number"},
+    "fanmatch_tempo_home": {"type":"number"},
+    "fanmatch_tempo_visitor": {"type":"number"}
+  }
+}

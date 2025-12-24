@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KenPom Four Factors Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "DataThrough": {
+        "description": "Date through which data is current",
+        "type": "string"
+      },
+      "ConfOnly": {
+        "description": "Whether this is conference-only data (\"true\" or \"false\")",
+        "type": "string"
+      },
+      "Season": {
+        "description": "Ending year of the season",
+        "type": "integer"
+      },
+      "TeamName": {
+        "description": "Team name",
+        "type": "string"
+      },
+      "eFG_Pct": {
+        "description": "Effective field goal percentage (offense)",
+        "type": "number"
+      },
+      "TO_Pct": {
+        "description": "Turnover percentage (offense)",
+        "type": "number"
+      },
+      "OR_Pct": {
+        "description": "Offensive rebounding percentage",
+        "type": "number"
+      },
+      "FT_Rate": {
+        "description": "Free throw rate (offense)",
+        "type": "number"
+      },
+      "Def_eFG_Pct": {
+        "description": "Effective FG% allowed (defense)",
+        "type": "number"
+      },
+      "Def_TO_Pct": {
+        "description": "Turnover percentage forced (defense)",
+        "type": "number"
+      },
+      "Def_OR_Pct": {
+        "description": "Defensive rebounding percentage",
+        "type": "number"
+      },
+      "Def_FT_Rate": {
+        "description": "Free throw rate allowed (defense)",
+        "type": "number"
+      },
+      "AdjOE": {
+        "description": "Adjusted offensive efficiency",
+        "type": "number"
+      },
+      "AdjDE": {
+        "description": "Adjusted defensive efficiency",
+        "type": "number"
+      },
+      "AdjTempo": {
+        "description": "Adjusted tempo",
+        "type": "number"
+      }
+    },
+    "additionalProperties": true
+  }
+}

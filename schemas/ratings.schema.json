@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KenPom Ratings Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "DataThrough": {
+        "description": "Date or description of games included in data",
+        "type": "string"
+      },
+      "Season": {
+        "description": "Ending year of the season",
+        "type": "integer"
+      },
+      "TeamName": {
+        "description": "Team name",
+        "type": "string"
+      },
+      "Seed": {
+        "description": "Tournament seed (if applicable)",
+        "type": "integer"
+      },
+      "ConfShort": {
+        "description": "Conference abbreviation",
+        "type": "string"
+      },
+      "Coach": {
+        "description": "Head coach name",
+        "type": "string"
+      },
+      "Wins": {
+        "description": "Number of wins",
+        "type": "integer"
+      },
+      "Losses": {
+        "description": "Number of losses",
+        "type": "integer"
+      },
+      "AdjEM": {
+        "description": "Adjusted efficiency margin",
+        "type": "number"
+      },
+      "RankAdjEM": {
+        "description": "Adjusted efficiency margin rank",
+        "type": "integer"
+      },
+      "AdjOE": {
+        "description": "Adjusted offensive efficiency",
+        "type": "number"
+      },
+      "RankAdjOE": {
+        "description": "Adjusted offensive efficiency rank",
+        "type": "integer"
+      },
+      "OE": {
+        "description": "Offensive efficiency",
+        "type": "number"
+      },
+      "RankOE": {
+        "description": "Offensive efficiency rank",
+        "type": "integer"
+      },
+      "AdjDE": {
+        "description": "Adjusted defensive efficiency",
+        "type": "number"
+      },
+      "RankAdjDE": {
+        "description": "Adjusted defensive efficiency rank",
+        "type": "integer"
+      },
+      "DE": {
+        "description": "Defensive efficiency",
+        "type": "number"
+      },
+      "RankDE": {
+        "description": "Defensive efficiency rank",
+        "type": "integer"
+      },
+      "Tempo": {
+        "description": "Tempo (possessions per 40 minutes)",
+        "type": "number"
+      },
+      "RankTempo": {
+        "description": "Tempo rank",
+        "type": "integer"
+      },
+      "AdjTempo": {
+        "description": "Adjusted tempo",
+        "type": "number"
+      },
+      "RankAdjTempo": {
+        "description": "Adjusted tempo rank",
+        "type": "integer"
+      },
+      "Luck": {
+        "description": "Luck rating",
+        "type": "number"
+      },
+      "RankLuck": {
+        "description": "Luck rank",
+        "type": "integer"
+      },
+      "SOS": {
+        "description": "Strength of schedule",
+        "type": "number"
+      },
+      "RankSOS": {
+        "description": "Strength of schedule rank",
+        "type": "integer"
+      },
+      "APL_Off": {
+        "description": "Average possession length (offense)",
+        "type": "number"
+      },
+      "APL_Def": {
+        "description": "Average possession length (defense)",
+        "type": "number"
+      }
+    },
+    "additionalProperties": true
+  }
+}

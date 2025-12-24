@@ -32,6 +32,7 @@ from mcp.types import TextContent, Tool
 from .client import KenPomClient
 from .config import Settings
 from .effort import EffortLevel, classify_effort
+from .prediction import DEFAULT_HOME_COURT_ADVANTAGE, DEFAULT_SIGMOID_K, project_scores
 
 # Load environment variables
 load_dotenv()
@@ -158,6 +159,13 @@ TOOL_METADATA: dict[str, ToolMetadata] = {
         name="kenpom_top_teams",
         effort_level=EffortLevel.MEDIUM,
         description="Ranked team list by metric",
+        is_read_only=True,
+        requires_reasoning=True,
+    ),
+    "kenpom_project": ToolMetadata(
+        name="kenpom_project",
+        effort_level=EffortLevel.MEDIUM,
+        description="Project game scores using efficiency model",
         is_read_only=True,
         requires_reasoning=True,
     ),
@@ -451,6 +459,43 @@ async def list_tools() -> list[Tool]:
                 "required": ["metric"],
             },
         ),
+        # Score projection tool
+        Tool(
+            name="kenpom_project",
+            description="Project game score, margin, total, and win probability for a matchup. "
+            "Uses OE/DE crossover method with configurable home court advantage.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "home_team": {
+                        "type": "string",
+                        "description": "Home team name (e.g., 'Duke')",
+                    },
+                    "visitor_team": {
+                        "type": "string",
+                        "description": "Visitor team name (e.g., 'North Carolina')",
+                    },
+                    "archive_date": {
+                        "type": "string",
+                        "description": "Optional: Use archive ratings from this date (YYYY-MM-DD) "
+                        "for backtesting. If omitted, uses current ratings.",
+                    },
+                    "home_adv": {
+                        "type": "number",
+                        "description": f"Home court advantage in points (default: {DEFAULT_HOME_COURT_ADVANTAGE})",
+                    },
+                    "k": {
+                        "type": "number",
+                        "description": f"Sigmoid scaling factor for win probability (default: {DEFAULT_SIGMOID_K})",
+                    },
+                    "season": {
+                        "type": "integer",
+                        "description": "Season year (default: current, ignored if archive_date set)",
+                    },
+                },
+                "required": ["home_team", "visitor_team"],
+            },
+        ),
         # Meta tools for effort classification
         Tool(
             name="classify_effort",
@@ -675,6 +720,61 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                     f"(Record: {team['Wins']}-{team['Losses']})"
                 )
             result = "\n".join(lines)
+
+        elif name == "kenpom_project":
+            home_team = arguments["home_team"]
+            visitor_team = arguments["visitor_team"]
+            archive_date = arguments.get("archive_date")
+            home_adv = arguments.get("home_adv", DEFAULT_HOME_COURT_ADVANTAGE)
+            k = arguments.get("k", DEFAULT_SIGMOID_K)
+            season = arguments.get("season", current_year)
+
+            # Get ratings (archive or current)
+            if archive_date:
+                data = client.archive(d=archive_date)
+            else:
+                data = client.ratings(y=season)
+
+            # Find teams (case-insensitive partial match)
+            def find_rating(name: str):
+                name_lower = name.lower()
+                for r in data:
+                    if name_lower in r.TeamName.lower():
+                        return r
+                return None
+
+            home = find_rating(home_team)
+            visitor = find_rating(visitor_team)
+
+            if not home or not visitor:
+                missing = []
+                if not home:
+                    missing.append(home_team)
+                if not visitor:
+                    missing.append(visitor_team)
+                result = f"Could not find team(s): {', '.join(missing)}"
+            else:
+                proj = project_scores(home, visitor, home_adv=home_adv, k=k)
+                lines = [
+                    f"PROJECTION: {visitor.TeamName} @ {home.TeamName}",
+                    "=" * 50,
+                    "",
+                    f"Projected Score: {proj.proj_visitor:.1f} - {proj.proj_home:.1f}",
+                    f"Projected Total: {proj.proj_total:.1f}",
+                    f"Projected Margin: {proj.proj_margin:+.1f} (home)",
+                    f"Possessions: {proj.possessions:.1f}",
+                    "",
+                    "Win Probability:",
+                    f"  {home.TeamName}: {proj.win_prob_home:.1%}",
+                    f"  {visitor.TeamName}: {proj.win_prob_visitor:.1%}",
+                    "",
+                    "Parameters:",
+                    f"  Home Adv: {proj.home_adv}",
+                    f"  Sigmoid k: {proj.k}",
+                    f"  Method: {proj.method}",
+                    f"  Source: {proj.feature_source}",
+                ]
+                result = "\n".join(lines)
 
         elif name == "classify_effort":
             query = arguments["query"]

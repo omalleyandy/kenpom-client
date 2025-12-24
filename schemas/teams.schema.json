@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KenPom Teams Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "Season": {
+        "description": "Ending year of the season",
+        "type": "integer"
+      },
+      "TeamName": {
+        "description": "Team name",
+        "type": "string"
+      },
+      "TeamID": {
+        "description": "Unique team identifier",
+        "type": "integer"
+      },
+      "ConfShort": {
+        "description": "Conference short name",
+        "type": "string"
+      },
+      "Coach": {
+        "description": "Head coach name",
+        "type": "string"
+      },
+      "Arena": {
+        "description": "Home arena name",
+        "type": "string"
+      },
+      "ArenaCity": {
+        "description": "City where arena is located",
+        "type": "string"
+      },
+      "ArenaState": {
+        "description": "State where arena is located",
+        "type": "string"
+      }
+    },
+    "additionalProperties": true
+  }
+}

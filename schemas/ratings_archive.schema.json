@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KenPom Ratings Archive Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "ArchiveDate": {
+        "description": "Date of the archived ratings",
+        "type": "string"
+      },
+      "Season": {
+        "description": "Ending year of the season",
+        "type": "integer"
+      },
+      "Preseason": {
+        "description": "Whether this is preseason data (\"true\" or \"false\")",
+        "type": "string"
+      },
+      "TeamName": {
+        "description": "Team name",
+        "type": "string"
+      },
+      "Seed": {
+        "description": "NCAA tournament seed (if applicable)",
+        "type": "integer"
+      },
+      "Event": {
+        "description": "Tournament event/round description",
+        "type": "string"
+      },
+      "ConfShort": {
+        "description": "Conference abbreviation",
+        "type": "string"
+      },
+      "AdjEM": {
+        "description": "Adjusted efficiency margin on archive date",
+        "type": "number"
+      },
+      "AdjOE": {
+        "description": "Adjusted offensive efficiency on archive date",
+        "type": "number"
+      },
+      "AdjDE": {
+        "description": "Adjusted defensive efficiency on archive date",
+        "type": "number"
+      },
+      "AdjTempo": {
+        "description": "Adjusted tempo on archive date",
+        "type": "number"
+      },
+      "AdjEMFinal": {
+        "description": "Final adjusted efficiency margin",
+        "type": "number"
+      },
+      "AdjOEFinal": {
+        "description": "Final adjusted offensive efficiency",
+        "type": "number"
+      },
+      "AdjDEFinal": {
+        "description": "Final adjusted defensive efficiency",
+        "type": "number"
+      },
+      "AdjTempoFinal": {
+        "description": "Final adjusted tempo",
+        "type": "number"
+      },
+      "RankChg": {
+        "description": "Change in efficiency margin rank from archive date to final",
+        "type": "integer"
+      },
+      "AdjEMChg": {
+        "description": "Change in efficiency margin from archive date to final",
+        "type": "number"
+      },
+      "AdjTChg": {
+        "description": "Change in tempo from archive date to final",
+        "type": "number"
+      }
+    },
+    "additionalProperties": true
+  }
+}
