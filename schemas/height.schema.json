@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KenPom Height Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "DataThrough": {
+        "description": "Date through which data is current",
+        "type": "string"
+      },
+      "Season": {
+        "description": "Ending year of the season",
+        "type": "integer"
+      },
+      "TeamName": {
+        "description": "Team name",
+        "type": "string"
+      },
+      "ConfShort": {
+        "description": "Conference abbreviation",
+        "type": "string"
+      },
+      "AvgHgt": {
+        "description": "Average team height (inches)",
+        "type": "number"
+      },
+      "HgtEff": {
+        "description": "Effective height",
+        "type": "number"
+      },
+      "Hgt5": {
+        "description": "Center height",
+        "type": "number"
+      },
+      "Hgt4": {
+        "description": "Power forward height",
+        "type": "number"
+      },
+      "Hgt3": {
+        "description": "Small forward height",
+        "type": "number"
+      },
+      "Hgt2": {
+        "description": "Shooting guard height",
+        "type": "number"
+      },
+      "Hgt1": {
+        "description": "Point guard height",
+        "type": "number"
+      },
+      "Exp": {
+        "description": "Experience rating",
+        "type": "number"
+      },
+      "Bench": {
+        "description": "Bench strength rating",
+        "type": "number"
+      },
+      "Continuity": {
+        "description": "Team continuity rating",
+        "type": "number"
+      }
+    },
+    "additionalProperties": true
+  }
+}

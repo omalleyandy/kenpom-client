@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KenPom Fanmatch Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "Season": {
+        "description": "Ending year of the season",
+        "type": "integer"
+      },
+      "GameID": {
+        "description": "Unique game identifier",
+        "type": "integer"
+      },
+      "DateOfGame": {
+        "description": "Game date (YYYY-MM-DD)",
+        "type": "string"
+      },
+      "Visitor": {
+        "description": "Visiting team name",
+        "type": "string"
+      },
+      "Home": {
+        "description": "Home team name",
+        "type": "string"
+      },
+      "HomeRank": {
+        "description": "Home team's KenPom rank on game day",
+        "type": "integer"
+      },
+      "VisitorRank": {
+        "description": "Visitor team's KenPom rank on game day",
+        "type": "integer"
+      },
+      "HomePred": {
+        "description": "Predicted home score",
+        "type": "number"
+      },
+      "VisitorPred": {
+        "description": "Predicted visitor score",
+        "type": "number"
+      },
+      "HomeWP": {
+        "description": "Home win probability",
+        "type": "number"
+      },
+      "PredTempo": {
+        "description": "Predicted tempo",
+        "type": "number"
+      },
+      "ThrillScore": {
+        "description": "Game thrill score",
+        "type": "number"
+      }
+    },
+    "additionalProperties": true
+  }
+}

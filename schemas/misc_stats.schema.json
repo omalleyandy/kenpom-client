@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KenPom Misc Stats Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "DataThrough": {
+        "description": "Date through which data is current",
+        "type": "string"
+      },
+      "ConfOnly": {
+        "description": "Whether this is conference-only data (\"true\" or \"false\")",
+        "type": "string"
+      },
+      "Season": {
+        "description": "Ending year of the season",
+        "type": "integer"
+      },
+      "TeamName": {
+        "description": "Team name",
+        "type": "string"
+      },
+      "ConfShort": {
+        "description": "Conference abbreviation",
+        "type": "string"
+      },
+      "FG3Pct": {
+        "description": "3PT field goal percentage (offense)",
+        "type": "number"
+      },
+      "FG2Pct": {
+        "description": "2PT field goal percentage (offense)",
+        "type": "number"
+      },
+      "FTPct": {
+        "description": "Free throw percentage (offense)",
+        "type": "number"
+      },
+      "BlockPct": {
+        "description": "Block percentage (offense)",
+        "type": "number"
+      },
+      "StlRate": {
+        "description": "Steal rate (offense)",
+        "type": "number"
+      },
+      "NSTRate": {
+        "description": "Non-steal turnover rate (offense)",
+        "type": "number"
+      },
+      "ARate": {
+        "description": "Assist rate (offense)",
+        "type": "number"
+      },
+      "pFG3Rate": {
+        "description": "3PT attempt rate (offense)",
+        "type": "number"
+      },
+      "AdjOE": {
+        "description": "Adjusted offensive efficiency",
+        "type": "number"
+      },
+      "OppFG3Pct": {
+        "description": "Opponent 3PT field goal percentage (defense)",
+        "type": "number"
+      },
+      "OppFG2Pct": {
+        "description": "Opponent 2PT field goal percentage (defense)",
+        "type": "number"
+      },
+      "OppFTPct": {
+        "description": "Opponent free throw percentage (defense)",
+        "type": "number"
+      },
+      "OppBlockPct": {
+        "description": "Opponent block percentage (defense)",
+        "type": "number"
+      },
+      "OppStlRate": {
+        "description": "Opponent steal rate (defense)",
+        "type": "number"
+      },
+      "OppNSTRate": {
+        "description": "Opponent non-steal turnover rate (defense)",
+        "type": "number"
+      },
+      "OppARate": {
+        "description": "Opponent assist rate (defense)",
+        "type": "number"
+      },
+      "OpppFG3Rate": {
+        "description": "Opponent 3PT attempt rate (defense)",
+        "type": "number"
+      },
+      "AdjDE": {
+        "description": "Adjusted defensive efficiency",
+        "type": "number"
+      }
+    },
+    "additionalProperties": true
+  }
+}
