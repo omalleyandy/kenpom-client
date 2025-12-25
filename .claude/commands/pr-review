@@ -1,13 +1,12 @@
-# Review Pull Request
+---
+description: Review a specific pull request
+allowed-tools: Bash(gh:*)
+argument-hint: <pr-number>
+---
 
-Review a specific pull request.
+Review pull request #$ARGUMENTS.
 
-## Usage
-Provide a PR number as an argument: `/pr-review 23`
-
-## Instructions
-
-Run these commands for PR #$ARGUMENTS:
+Run these commands:
 
 ### 1. Get PR Details
 ```bash
@@ -24,16 +23,10 @@ gh pr diff $ARGUMENTS
 gh pr checks $ARGUMENTS
 ```
 
-### 4. View Comments
-```bash
-gh api repos/{owner}/{repo}/pulls/$ARGUMENTS/comments --jq '.[] | {user: .user.login, body: .body, path: .path}'
-```
-
 ## Output
 
 Provide a summary including:
 - PR title and description
 - Files changed (grouped by type)
 - CI status (pass/fail/pending)
-- Any review comments
 - Recommendation: approve, request changes, or needs discussion

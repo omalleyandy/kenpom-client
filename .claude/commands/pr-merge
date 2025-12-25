@@ -1,13 +1,10 @@
-# Merge Pull Request
+---
+description: Safely merge a pull request with pre-flight checks
+allowed-tools: Bash(gh:*), Bash(git checkout:*), Bash(git pull:*)
+argument-hint: <pr-number>
+---
 
-Safely merge a pull request with checks.
-
-## Usage
-Provide a PR number as an argument: `/pr-merge 23`
-
-## Instructions
-
-For PR #$ARGUMENTS:
+Merge pull request #$ARGUMENTS.
 
 ### 1. Pre-merge Checks (run in parallel)
 ```bash
@@ -18,9 +15,9 @@ gh pr checks $ARGUMENTS
 ### 2. Verify Before Merge
 
 Before merging, confirm:
-- [ ] PR is approved (reviewDecision = APPROVED) or no reviews required
-- [ ] All CI checks pass
-- [ ] No merge conflicts (mergeable = MERGEABLE)
+- PR is approved (reviewDecision = APPROVED) or no reviews required
+- All CI checks pass
+- No merge conflicts (mergeable = MERGEABLE)
 
 ### 3. Merge Options
 

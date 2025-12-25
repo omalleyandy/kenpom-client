@@ -1,10 +1,11 @@
-# GitHub Repository Status
+---
+description: Comprehensive GitHub repository health check
+allowed-tools: Bash(gh:*), Bash(git branch:*)
+---
 
 Run a comprehensive GitHub repository health check using the `gh` CLI.
 
-## Instructions
-
-Execute ALL of the following `gh` commands in parallel and present a formatted summary:
+Execute ALL of the following commands in parallel and present a formatted summary:
 
 ### 1. Repository Overview
 ```bash
