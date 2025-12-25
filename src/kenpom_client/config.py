@@ -16,7 +16,13 @@ def _env_float(key: str, default: float) -> float:
 
 def _env_str(key: str, default: str) -> str:
     val = os.getenv(key)
-    return default if val is None or val.strip() == "" else val
+    if val is None or val.strip() == "":
+        return default
+    # Strip surrounding quotes if present (common misconfiguration)
+    val = val.strip()
+    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+        val = val[1:-1]
+    return val
 
 
 @dataclass(frozen=True)
