@@ -1,0 +1,33 @@
+---
+description: Check GitHub Actions workflow status
+allowed-tools: Bash(gh:*)
+---
+
+Check the status of GitHub Actions workflows.
+
+### 1. List Available Workflows
+```bash
+gh workflow list
+```
+
+### 2. Recent Runs (all workflows)
+```bash
+gh run list --limit 10
+```
+
+### 3. Failed Runs Details
+```bash
+gh run list --status failure --limit 5
+```
+
+## Output Format
+
+Present a summary table with:
+| Workflow | Status | Branch | Duration | When |
+
+Highlight:
+- Any currently running workflows
+- Recent failures with error summaries
+- Success rate over last 10 runs
+
+If there are failures, offer to show the logs with `gh run view <run-id> --log-failed`.
