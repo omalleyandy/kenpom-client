@@ -124,6 +124,7 @@ pyrefly check
 - Handles authentication via Bearer token in headers
 - Integrates rate limiting, caching, and retry logic
 - Provides methods for all API endpoints: `teams()`, `conferences()`, `ratings()`, `archive()`, `fanmatch()`
+- Supports context manager: `with KenPomClient(settings) as client:`
 
 **Settings** (`config.py`)
 - Centralized configuration from environment variables
@@ -152,7 +153,7 @@ pyrefly check
 
 **CLI** (`cli.py`)
 - Entry point: `kenpom` command (defined in `pyproject.toml`)
-- Subcommands: `teams`, `ratings`, `archive`, `fanmatch`, `hca`
+- Subcommands: `teams`, `conferences`, `ratings`, `archive`, `fanmatch`, `slate`, `fourfactors`, `pointdist`, `height`, `miscstats`, `hca`
 - Exports to CSV, JSON, and Parquet simultaneously
 
 **HCA Scraper** (`hca_scraper.py`)
@@ -180,6 +181,17 @@ pyrefly check
 - Includes team name normalization (ESPN → KenPom format)
 - Outputs JSON and CSV snapshots to data/espn_officials_YYYY-MM-DD.{json,csv}
 - Can run on-demand for specific games: `--game-id 401827093`
+
+**MCP Server** (`mcp_server.py`)
+- Model Context Protocol server for Claude Desktop/Claude Code integration
+- Exposes KenPom tools: `kenpom_ratings`, `kenpom_slate`, `kenpom_project`
+- Run with: `uv run kenpom-mcp`
+
+**Game Prediction** (`prediction.py`, `matchup.py`, `slate.py`)
+- `MatchupFeatures`: Dataclass for team comparison metrics (efficiency deltas, style mismatches)
+- `project_scores()`: Individual team scores using OE/DE crossover method
+- `fanmatch_slate_table()`: Builds projection tables for a date with optional odds joining
+- Used by CLI `slate` subcommand and MCP `kenpom_slate` tool
 
 ### Data Flow
 
