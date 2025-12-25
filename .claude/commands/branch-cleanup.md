@@ -1,0 +1,43 @@
+# Branch Cleanup
+
+Clean up stale local and remote branches.
+
+## Instructions
+
+### 1. Fetch and Prune Remote
+```bash
+git fetch --prune
+```
+
+### 2. List Merged Branches
+Show branches that have been merged to main:
+```bash
+git branch --merged main | grep -v "main\|master\|\*"
+```
+
+### 3. List Stale Remote Branches
+Show remote branches with no recent activity:
+```bash
+gh pr list --state merged --limit 20 --json headRefName --jq '.[].headRefName'
+```
+
+### 4. Show Branch Age
+```bash
+git for-each-ref --sort=-committerdate --format='%(refname:short) %(committerdate:relative)' refs/heads/ | head -20
+```
+
+## Actions
+
+Present the list of branches that can be safely deleted and ask for confirmation before:
+
+1. Deleting local merged branches:
+   ```bash
+   git branch -d <branch-name>
+   ```
+
+2. Deleting remote branches (if requested):
+   ```bash
+   git push origin --delete <branch-name>
+   ```
+
+Never force-delete branches without explicit user confirmation.
