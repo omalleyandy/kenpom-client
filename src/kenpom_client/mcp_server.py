@@ -625,7 +625,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                         spread_str = f"{g['Visitor']} -{abs(spread):.1f}"
                     lines.append(
                         f"{g['Visitor']} @ {g['Home']}: {g['VisitorPred']:.1f}-{g['HomePred']:.1f} "
-                        f"(Line: {spread_str}, WP: {g['HomeWP'] * 100:.0f}%)"
+                        f"(Line: {spread_str}, WP: {g['HomeWP']:.0f}%)"
                     )
                 result = "\n".join(lines)
 
