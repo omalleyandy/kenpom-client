@@ -2,6 +2,16 @@
 
 Builds projection tables for a given date with optional archive features
 for backtesting and odds joining for edge calculation.
+
+Supports two projection methods:
+1. Simple average (legacy): E = (OE + DE) / 2
+2. Log-linear (enhanced): E = OE + DE - 100
+
+The log-linear method better matches KenPom's official predictions by:
+- Using correct efficiency combination relative to D1 baseline
+- Applying HCA to efficiency (not just score adjustment)
+- Supporting luck regression for unsustainable performance
+- Using fanmatch PredTempo when available
 """
 
 from __future__ import annotations
@@ -15,6 +25,7 @@ import pandas as pd
 
 from .client import KenPomClient
 from .config import Settings
+from .prediction import D1_AVERAGE_EFFICIENCY, calculate_luck_adjustment
 
 log = logging.getLogger(__name__)
 
@@ -63,8 +74,6 @@ OVERTIME_TO_KENPOM: Dict[str, str] = {
     "Arizona St": "Arizona St.",
     "App State": "Appalachian St.",
     "Appalachian State": "Appalachian St.",
-    "St. Johns": "St. John's",
-    # Apostrophe variants
     "St. Johns": "St. John's",
     # State -> St. abbreviations
     "Morgan State": "Morgan St.",
@@ -156,6 +165,9 @@ def fanmatch_slate_table(
     use_archive: bool = False,
     archive_fallback_to_ratings: bool = True,
     client: Optional[KenPomClient] = None,
+    use_loglinear: bool = True,
+    use_pred_tempo: bool = True,
+    apply_luck_regression: bool = True,
 ) -> pd.DataFrame:
     """Build a full slate table for a given Fanmatch date.
 
@@ -169,6 +181,12 @@ def fanmatch_slate_table(
       - If use_archive=True: pulls time-correct features from archive endpoint
       - Else: pulls current-season features from ratings endpoint
 
+    Projection method:
+      - If use_loglinear=True (default): Uses enhanced log-linear formula
+        E = OE + DE - 100 (better matches KenPom official predictions)
+      - If use_loglinear=False: Uses legacy simple average
+        E = (OE + DE) / 2
+
     Args:
         d: Date in YYYY-MM-DD format
         k: Win-prob calibration scale (~10-12 typical)
@@ -178,6 +196,9 @@ def fanmatch_slate_table(
         use_archive: Use archive features for date d (time-correct for backtesting)
         archive_fallback_to_ratings: Fall back to ratings if archive fails
         client: Optional KenPomClient instance (creates new one if None)
+        use_loglinear: Use log-linear efficiency formula (default True)
+        use_pred_tempo: Use fanmatch PredTempo instead of average (default True)
+        apply_luck_regression: Apply luck regression adjustment (default True)
 
     Returns:
         DataFrame with game projections, sorted by absolute margin
@@ -287,11 +308,49 @@ def fanmatch_slate_table(
             fv, src_v, warn_v = get_features(vis_id)
 
             # Expected possessions (per 40 min)
-            poss = (_f(fh, "AdjTempo", "Tempo") + _f(fv, "AdjTempo", "Tempo")) / 2.0
+            # Use fanmatch PredTempo if available and enabled, otherwise average team tempos
+            if use_pred_tempo and "PredTempo" in g:
+                try:
+                    poss = float(g["PredTempo"])
+                except (TypeError, ValueError):
+                    poss = (_f(fh, "AdjTempo", "Tempo") + _f(fv, "AdjTempo", "Tempo")) / 2.0
+            else:
+                poss = (_f(fh, "AdjTempo", "Tempo") + _f(fv, "AdjTempo", "Tempo")) / 2.0
 
             # Expected efficiency (points per 100 poss)
-            E_home = (_f(fh, "AdjOE") + _f(fv, "AdjDE")) / 2.0
-            E_vis = (_f(fv, "AdjOE") + _f(fh, "AdjDE")) / 2.0
+            if use_loglinear:
+                # Log-linear formula: E = OE + DE - 100
+                # This correctly combines efficiencies relative to D1 average baseline
+                E_home_raw = _f(fh, "AdjOE") + _f(fv, "AdjDE") - D1_AVERAGE_EFFICIENCY
+                E_vis_raw = _f(fv, "AdjOE") + _f(fh, "AdjDE") - D1_AVERAGE_EFFICIENCY
+
+                # Apply luck regression if enabled and available
+                luck_adj_home = 0.0
+                luck_adj_vis = 0.0
+                if apply_luck_regression:
+                    try:
+                        luck_adj_home = calculate_luck_adjustment(fh.get("Luck"))
+                    except (KeyError, TypeError):
+                        pass
+                    try:
+                        luck_adj_vis = calculate_luck_adjustment(fv.get("Luck"))
+                    except (KeyError, TypeError):
+                        pass
+
+                # Apply HCA to efficiency (more accurate than score adjustment)
+                # HCA_efficiency = HCA_points * 100 / possessions
+                hca_efficiency = home_adv * 100.0 / poss
+
+                # Home team gets offensive efficiency boost + luck adjustment
+                E_home = E_home_raw + hca_efficiency + luck_adj_home
+                E_vis = E_vis_raw + luck_adj_vis
+            else:
+                # Legacy simple average formula: E = (OE + DE) / 2
+                E_home = (_f(fh, "AdjOE") + _f(fv, "AdjDE")) / 2.0
+                E_vis = (_f(fv, "AdjOE") + _f(fh, "AdjDE")) / 2.0
+                luck_adj_home = 0.0
+                luck_adj_vis = 0.0
+                hca_efficiency = 0.0
 
             # Base projected scores
             score_home = poss * (E_home / 100.0)
@@ -305,15 +364,24 @@ def fanmatch_slate_table(
                 except (KeyError, TypeError, ValueError):
                     pass
 
-            # Apply home advantage
-            score_home += home_adv / 2.0
-            score_vis -= home_adv / 2.0
+            # Apply home advantage (only for legacy method - loglinear applies to efficiency)
+            if not use_loglinear:
+                score_home += home_adv / 2.0
+                score_vis -= home_adv / 2.0
 
             margin = score_home - score_vis
             total = score_home + score_vis
 
             p_home = _sigmoid(margin / k)
             p_vis = 1.0 - p_home
+
+            # Determine method string
+            if use_fanmatch_scores:
+                method_str = "fanmatch_scores"
+            elif use_loglinear:
+                method_str = "loglinear_archive" if use_archive else "loglinear"
+            else:
+                method_str = "archive_to_points" if use_archive else "ratings_to_points"
 
             row = {
                 "date": g.get("DateOfGame", d),
@@ -331,9 +399,14 @@ def fanmatch_slate_table(
                 "eff_visitor_pp100": round(E_vis, 2),
                 "feature_source_home": src_h,
                 "feature_source_visitor": src_v,
-                "method": ("fanmatch_scores" if use_fanmatch_scores
-                           else ("archive_to_points" if use_archive else "ratings_to_points")),
+                "method": method_str,
             }
+
+            # Add enhanced formula diagnostics
+            if use_loglinear:
+                row["hca_efficiency"] = round(hca_efficiency, 2)
+                row["luck_adj_home"] = round(luck_adj_home, 3)
+                row["luck_adj_visitor"] = round(luck_adj_vis, 3)
 
             # Attach warnings
             warnings: List[str] = []
