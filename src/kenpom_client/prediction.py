@@ -7,8 +7,10 @@ on matchup features and uses an additive variance model for game-level sigma.
 Key Features:
 - Baseline model: Simple margin = home_adj_em - away_adj_em + 3.5
 - Enhanced model: Baseline + heuristic adjustments (±2 pts max)
+- Log-Linear model: Uses log-linear efficiency formula (OE + DE - 100)
 - Game-specific sigma: Additive variance model with interaction terms
 - Score projection: Individual team scores using OE/DE crossover
+- Luck regression: Adjusts for unsustainable performance
 - ML-ready architecture: Coefficients replaceable for machine learning
 """
 
@@ -31,6 +33,20 @@ DEFAULT_HOME_COURT_ADVANTAGE = 3.5
 # At k=11, a 10-point favorite has ~71% win probability
 # Lower k = sharper probabilities, higher k = more conservative
 DEFAULT_SIGMOID_K = 11.0
+
+# D1 average efficiency baseline (per 100 possessions)
+# All KenPom efficiencies are relative to this baseline
+D1_AVERAGE_EFFICIENCY = 100.0
+
+# Luck regression coefficient
+# Research suggests ~50-70% of luck regresses to mean over a season
+# We use 0.5 as a conservative estimate (half of luck is unsustainable)
+LUCK_REGRESSION_FACTOR = 0.5
+
+# HCA efficiency boost (applied to offensive efficiency, not just margin)
+# Standard 3.5 point HCA translates to ~5.0 efficiency points at 70 possessions
+# Formula: HCA_EFF = HCA_POINTS * 100 / avg_possessions ≈ 3.5 * 100 / 70 = 5.0
+HCA_EFFICIENCY_BOOST = 5.0
 
 
 # =============================================================================
@@ -166,6 +182,213 @@ def project_scores(
     )
 
 
+# =============================================================================
+# Enhanced Score Projection (Log-Linear Formula)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class EnhancedScoreProjection:
+    """Projected scores using log-linear efficiency formula.
+
+    This enhanced projection addresses the margin discrepancy with KenPom
+    by using:
+    1. Log-linear efficiency: E = OE + DE - 100 (not simple average)
+    2. HCA applied to efficiency (not just score adjustment)
+    3. Luck regression for unsustainable performance
+    4. Optional use of fanmatch PredTempo
+
+    All fields from home team perspective.
+    """
+
+    proj_home: float  # Projected home team score
+    proj_visitor: float  # Projected visitor score
+    proj_total: float  # proj_home + proj_visitor
+    proj_margin: float  # proj_home - proj_visitor (positive = home favored)
+    possessions: float  # Expected game possessions
+    win_prob_home: float  # Win probability using normal CDF
+    win_prob_visitor: float  # 1 - win_prob_home
+    home_adv: float  # HCA value used (in points)
+    hca_efficiency: float  # HCA applied to efficiency
+    k: float  # Sigma value used for win probability
+    method: str  # "loglinear" or "loglinear_archive"
+    feature_source: str  # Source identifier for the ratings data
+    luck_adjustment_home: float  # Luck regression applied to home team
+    luck_adjustment_visitor: float  # Luck regression applied to visitor
+    eff_home_raw: float  # Raw efficiency before HCA (for debugging)
+    eff_visitor_raw: float  # Raw efficiency before HCA (for debugging)
+
+
+def calculate_luck_adjustment(luck: Optional[float]) -> float:
+    """Calculate efficiency adjustment based on team luck.
+
+    Luck measures how actual wins differ from expected wins. Positive luck
+    indicates the team has been winning close games at an unsustainable rate.
+
+    We regress luck toward zero to account for expected regression to mean.
+
+    Args:
+        luck: Team luck value from KenPom (can be None for archive data)
+
+    Returns:
+        Efficiency adjustment in points per 100 possessions
+        Negative = team has been lucky, expect regression (lower efficiency)
+        Positive = team has been unlucky, expect improvement
+
+    Example:
+        >>> calculate_luck_adjustment(0.05)  # 5% lucky
+        -0.25  # Expect 0.25 lower efficiency
+        >>> calculate_luck_adjustment(-0.03)  # 3% unlucky
+        0.15  # Expect 0.15 higher efficiency
+    """
+    if luck is None:
+        return 0.0
+
+    # Luck is typically in range [-0.10, 0.10]
+    # Convert to efficiency adjustment: luck * regression_factor * scaling
+    # Scaling: 1% luck ≈ 0.5 efficiency points
+    return -luck * LUCK_REGRESSION_FACTOR * 10.0
+
+
+def project_scores_loglinear(
+    home: Union[Rating, ArchiveRating],
+    visitor: Union[Rating, ArchiveRating],
+    home_adv: float = DEFAULT_HOME_COURT_ADVANTAGE,
+    k: float = DEFAULT_SIGMOID_K,
+    feature_source: Optional[str] = None,
+    pred_tempo: Optional[float] = None,
+    apply_luck_regression: bool = True,
+) -> EnhancedScoreProjection:
+    """Project scores using log-linear efficiency formula.
+
+    This is the enhanced projection algorithm that better matches KenPom's
+    official predictions by using:
+
+    1. Log-Linear Efficiency: E = OE + DE - 100
+       Instead of simple average, this correctly combines efficiencies
+       relative to D1 baseline (100).
+
+    2. HCA on Efficiency: Home team gets +HCA_EFF boost to offensive efficiency
+       This is more accurate than splitting HCA across final scores.
+
+    3. Luck Regression: Adjusts for unsustainable luck in win/loss record
+       Teams with high luck are expected to regress.
+
+    4. PredTempo Option: Use fanmatch's predicted tempo instead of averaging
+
+    Args:
+        home: Home team Rating or ArchiveRating
+        visitor: Visitor team Rating or ArchiveRating
+        home_adv: Home court advantage in points (default 3.5)
+        k: Sigma for win probability calculation (default 11.0)
+        feature_source: Optional source identifier
+        pred_tempo: Optional predicted tempo from fanmatch (overrides average)
+        apply_luck_regression: Whether to apply luck adjustment (default True)
+
+    Returns:
+        EnhancedScoreProjection with projected scores, margin, and diagnostics
+
+    Example:
+        >>> from kenpom_client.client import KenPomClient
+        >>> client = KenPomClient(settings)
+        >>> ratings = client.ratings(y=2025)
+        >>> gonzaga = next(r for r in ratings if "Gonzaga" in r.TeamName)
+        >>> bucknell = next(r for r in ratings if "Bucknell" in r.TeamName)
+        >>> proj = project_scores_loglinear(gonzaga, bucknell)
+        >>> print(f"Margin: {proj.proj_margin:.1f}")  # Should be closer to KenPom
+    """
+    # Step 1: Compute possessions
+    # Use provided PredTempo or fall back to average of team tempos
+    if pred_tempo is not None:
+        poss = pred_tempo
+    else:
+        poss = (home.AdjTempo + visitor.AdjTempo) / 2.0
+
+    # Step 2: Compute expected efficiencies using LOG-LINEAR formula
+    # E = OE + DE - 100 (not simple average)
+    # This correctly combines efficiencies relative to D1 average baseline
+    eff_home_raw = home.AdjOE + visitor.AdjDE - D1_AVERAGE_EFFICIENCY
+    eff_visitor_raw = visitor.AdjOE + home.AdjDE - D1_AVERAGE_EFFICIENCY
+
+    # Step 3: Apply luck regression (if available and enabled)
+    luck_adj_home = 0.0
+    luck_adj_visitor = 0.0
+
+    if apply_luck_regression:
+        # Get luck values (only available in Rating, not ArchiveRating)
+        home_luck = getattr(home, "Luck", None)
+        visitor_luck = getattr(visitor, "Luck", None)
+
+        luck_adj_home = calculate_luck_adjustment(home_luck)
+        luck_adj_visitor = calculate_luck_adjustment(visitor_luck)
+
+    # Step 4: Apply HCA to efficiency (not just score)
+    # Convert point-based HCA to efficiency-based HCA
+    # HCA_efficiency = HCA_points * 100 / possessions
+    hca_efficiency = home_adv * 100.0 / poss
+
+    # Home team gets offensive efficiency boost
+    # Visitor team gets no adjustment (or equivalently, faces tougher defense)
+    eff_home = eff_home_raw + hca_efficiency + luck_adj_home
+    eff_visitor = eff_visitor_raw + luck_adj_visitor
+
+    # Step 5: Compute projected scores
+    proj_home = poss * eff_home / 100.0
+    proj_visitor = poss * eff_visitor / 100.0
+
+    # Step 6: Compute derived outputs
+    proj_total = proj_home + proj_visitor
+    proj_margin = proj_home - proj_visitor
+
+    # Step 7: Compute win probability using normal CDF
+    # More accurate than sigmoid for point spreads
+    win_prob_home = normal_cdf(proj_margin / k)
+    win_prob_visitor = 1.0 - win_prob_home
+
+    # Determine method and feature source
+    is_archive = isinstance(home, ArchiveRating)
+    method = "loglinear_archive" if is_archive else "loglinear"
+
+    if feature_source is None:
+        if is_archive:
+            feature_source = f"archive:{home.ArchiveDate}"
+        else:
+            feature_source = f"ratings:{home.DataThrough}"
+
+    return EnhancedScoreProjection(
+        proj_home=proj_home,
+        proj_visitor=proj_visitor,
+        proj_total=proj_total,
+        proj_margin=proj_margin,
+        possessions=poss,
+        win_prob_home=win_prob_home,
+        win_prob_visitor=win_prob_visitor,
+        home_adv=home_adv,
+        hca_efficiency=hca_efficiency,
+        k=k,
+        method=method,
+        feature_source=feature_source,
+        luck_adjustment_home=luck_adj_home,
+        luck_adjustment_visitor=luck_adj_visitor,
+        eff_home_raw=eff_home_raw,
+        eff_visitor_raw=eff_visitor_raw,
+    )
+
+
+def normal_cdf(x: float) -> float:
+    """Approximate the cumulative distribution function of standard normal.
+
+    Uses the error function approximation for faster calculation without scipy.
+
+    Args:
+        x: Standard score (z-score)
+
+    Returns:
+        Probability that a standard normal variable is less than x
+    """
+    return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
+
 # Heuristic coefficients for enhanced margin model
 # Research-based conservative adjustments (±2 pts max total)
 HEURISTIC_COEFFICIENTS = {
@@ -229,20 +452,6 @@ class MarginPrediction:
 
     # Metadata
     prediction_version: str  # "1.0"
-
-
-def normal_cdf(x: float) -> float:
-    """Approximate the cumulative distribution function of standard normal.
-
-    Uses the error function approximation for faster calculation without scipy.
-
-    Args:
-        x: Standard score (z-score)
-
-    Returns:
-        Probability that a standard normal variable is less than x
-    """
-    return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
 
 def calculate_margin_baseline(
