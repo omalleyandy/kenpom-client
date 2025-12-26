@@ -146,6 +146,21 @@ def main() -> None:
         default=11.0,
         help="Sigmoid scale for win probability (default: 11.0)",
     )
+    p_slate.add_argument(
+        "--no-loglinear",
+        action="store_true",
+        help="Use legacy simple average formula instead of log-linear",
+    )
+    p_slate.add_argument(
+        "--no-pred-tempo",
+        action="store_true",
+        help="Use average team tempos instead of fanmatch PredTempo",
+    )
+    p_slate.add_argument(
+        "--no-luck-regression",
+        action="store_true",
+        help="Disable luck regression adjustment",
+    )
 
     # Advanced stats
     p_ff = sub.add_parser("fourfactors", help="Fetch Four Factors data for a season")
@@ -252,6 +267,9 @@ def main() -> None:
                 use_archive=use_archive,
                 archive_fallback_to_ratings=True,
                 client=client,
+                use_loglinear=not args.no_loglinear,
+                use_pred_tempo=not args.no_pred_tempo,
+                apply_luck_regression=not args.no_luck_regression,
             )
 
             if df.empty:
@@ -281,9 +299,12 @@ def main() -> None:
             _write_outputs(df, out_dir / filename)
 
             # Summary
+            formula = "log-linear" if not args.no_loglinear else "legacy average"
+            source = "archive (backtest)" if use_archive else "ratings (live)"
             print(f"\nSlate summary for {args.date}:")
             print(f"  Games: {len(df)}")
-            print(f"  Method: {'archive (backtest)' if use_archive else 'ratings (live)'}")
+            print(f"  Source: {source}")
+            print(f"  Formula: {formula}")
             if "spread_edge" in df.columns:
                 edges = df["spread_edge"].dropna()
                 if len(edges) > 0:
