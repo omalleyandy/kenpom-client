@@ -341,9 +341,15 @@ Full API documentation and JSON schemas are available in the `docs/` and `schema
 | Document | Description |
 |----------|-------------|
 | [ODDS_WORKFLOW.md](docs/ODDS_WORKFLOW.md) | Automated odds fetching workflow |
+| [WORKFLOW_MONITORING.md](docs/WORKFLOW_MONITORING.md) | GitHub Actions workflow monitoring guide |
 | [DAILY_SLATE_API.md](docs/DAILY_SLATE_API.md) | Daily slate output contract |
 | [daily_slate_row.json](schemas/daily_slate_row.json) | JSON Schema: single prediction |
 | [daily_slate_table.json](schemas/daily_slate_table.json) | JSON Schema: prediction array |
+
+**Development**:
+| Document | Description |
+|----------|-------------|
+| [RUN_TESTS.md](RUN_TESTS.md) | Guide for running the test suite |
 
 ## Development
 
