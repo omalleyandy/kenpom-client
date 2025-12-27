@@ -45,11 +45,11 @@ jobs:
         run: |
           TODAY=$(date +%Y-%m-%d)
           uv run kenpom ratings --y 2025 --date $TODAY --four-factors --point-dist --sigma
-          python analyze_todays_games.py
+          uv run python analyze_todays_games.py
       
       - name: Calculate betting edge
         run: |
-          python calculate_real_edge.py
+          uv run python calculate_real_edge.py
       
       - name: Upload results
         uses: actions/upload-artifact@v4
