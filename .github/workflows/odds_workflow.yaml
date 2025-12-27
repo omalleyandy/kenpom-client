@@ -1,0 +1,62 @@
+name: Fetch Odds and Calculate Edge
+
+on:
+  schedule:
+    # Run daily at 4:00 AM PST (12:00 PM UTC)
+    - cron: '0 12 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  fetch-odds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      
+      - name: Install dependencies
+        run: uv sync
+      
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium
+      
+      - name: Fetch odds from overtime.ag
+        env:
+          OV_CUSTOMER_ID: ${{ secrets.OV_CUSTOMER_ID }}
+          OV_PASSWORD: ${{ secrets.OV_PASSWORD }}
+          KENPOM_API_KEY: ${{ secrets.KENPOM_API_KEY }}
+        run: |
+          uv run fetch-odds
+      
+      - name: Generate KenPom predictions
+        env:
+          KENPOM_API_KEY: ${{ secrets.KENPOM_API_KEY }}
+        run: |
+          TODAY=$(date +%Y-%m-%d)
+          uv run kenpom ratings --y 2025 --date $TODAY --four-factors --point-dist --sigma
+          python analyze_todays_games.py
+      
+      - name: Calculate betting edge
+        run: |
+          python calculate_real_edge.py
+      
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: odds-analysis-${{ github.run_number }}
+          path: |
+            data/overtime_*.csv
+            data/todays_game_predictions_*.csv
+            data/betting_edge_analysis_*.csv
+          retention-days: 30
