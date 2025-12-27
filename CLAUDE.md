@@ -311,7 +311,9 @@ async with async_playwright() as p:
 ## Automated Odds Fetching Workflow
 
 ### Overview
-The project includes automated scraping of real market odds from overtime.ag using Playwright. The workflow runs daily at 4:00 AM PST via Windows Task Scheduler.
+The project includes automated scraping of real market odds from overtime.ag using Playwright. Two automation options are available:
+1. **GitHub Actions** (`.github/workflows/odds_workflow.yaml`) - Runs in CI/CD, recommended for cloud-based automation
+2. **Windows Task Scheduler** - Runs locally on Windows machines, configured via `setup_task_xml.ps1`
 
 ### Key Files
 
@@ -339,6 +341,13 @@ The project includes automated scraping of real market odds from overtime.ag usi
 - Includes Kelly Criterion bet sizing recommendations
 - Exports detailed analysis to `data/betting_edge_analysis_YYYY-MM-DD.csv`
 - Uses dynamic dates (runs for today's games automatically)
+
+**odds_workflow.yaml** ([.github/workflows/odds_workflow.yaml](.github/workflows/odds_workflow.yaml))
+- GitHub Actions workflow for automated odds fetching and edge calculation
+- Runs daily at 4:00 AM PST (12:00 PM UTC) via cron schedule
+- Can be triggered manually via `workflow_dispatch`
+- Requires GitHub Secrets: `OV_CUSTOMER_ID`, `OV_PASSWORD`, `KENPOM_API_KEY`
+- Uploads results as workflow artifacts for download
 
 ### Critical Implementation Details
 

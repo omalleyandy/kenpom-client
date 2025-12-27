@@ -142,7 +142,7 @@ Set in `.env`:
 | `OV_CUSTOMER_ID` | For odds | - | overtime.ag customer ID |
 | `OV_PASSWORD` | For odds | - | overtime.ag password |
 
-## Automated Odds Fetching (Windows)
+## Automated Odds Fetching
 
 The project includes automated scraping of real market odds from overtime.ag for NCAA Basketball games.
 
@@ -157,11 +157,7 @@ The project includes automated scraping of real market odds from overtime.ag for
    ```
    OV_CUSTOMER_ID=your_customer_id
    OV_PASSWORD=your_password
-   ```
-
-3. **Set up Windows Task Scheduler** (runs daily at 4:00 AM PST):
-   ```powershell
-   powershell -File setup_task_xml.ps1
+   KENPOM_API_KEY=your_kenpom_api_key
    ```
 
 ### Manual Usage
@@ -176,9 +172,37 @@ This will:
 2. Save odds to CSV in `data/` directory
 3. Automatically generate game predictions using KenPom data
 
-### Automated Workflow
+### Automated Workflows
 
-The scheduled task runs daily at 4:00 AM PST with automatic retry logic:
+#### Option 1: GitHub Actions (Recommended for CI/CD)
+
+A GitHub Actions workflow is available at `.github/workflows/odds_workflow.yaml` that:
+- Runs daily at 4:00 AM PST (12:00 PM UTC)
+- Fetches odds from overtime.ag
+- Generates KenPom predictions
+- Calculates betting edge
+- Uploads results as artifacts
+
+**Setup**:
+1. Add GitHub Secrets:
+   - `OV_CUSTOMER_ID` - overtime.ag customer ID
+   - `OV_PASSWORD` - overtime.ag password
+   - `KENPOM_API_KEY` - KenPom API key
+
+2. The workflow runs automatically on schedule or can be triggered manually via `workflow_dispatch`
+
+**View results**:
+- Go to Actions tab in GitHub repository
+- Download artifacts from completed workflow runs
+
+#### Option 2: Windows Task Scheduler (Local)
+
+For local Windows machines, set up Task Scheduler (runs daily at 4:00 AM PST):
+```powershell
+powershell -File setup_task_xml.ps1
+```
+
+The scheduled task runs with automatic retry logic:
 - Retries every 10 minutes if odds not yet available
 - Stops after 2 hours or successful fetch
 - Logs all activity to `logs/odds_fetch.log`
