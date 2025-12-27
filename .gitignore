@@ -60,6 +60,10 @@ env/
 # -----------------------------------------------------------------------------
 # Cache directory (API response cache)
 .cache/
+cache/
+
+# Claude settings (local only)
+.claude/settings.local.json
 
 # Output data files (regenerated on demand)
 data/
