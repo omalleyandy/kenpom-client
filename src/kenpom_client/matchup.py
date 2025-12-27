@@ -89,7 +89,9 @@ def _safe_get(row: pd.Series, key: str, default: float) -> float:
     return float(value)
 
 
-def calculate_matchup_features(away: pd.Series, home: pd.Series) -> MatchupFeatures:
+def calculate_matchup_features(
+    away: pd.Series, home: pd.Series, game_context: Optional["GameContext"] = None
+) -> MatchupFeatures:
     """Calculate matchup-specific features from team data.
 
     This function derives comparative metrics between two teams, including:
@@ -97,10 +99,12 @@ def calculate_matchup_features(away: pd.Series, home: pd.Series) -> MatchupFeatu
     - Shooting matchup advantages (offense vs defense eFG%)
     - Ball control signals (turnovers, rebounding)
     - Style classification (tempo control, 3PT reliance, style clash)
+    - Rest advantage and travel distance (if game_context provided)
 
     Args:
         away: Team data for away team (pandas Series from enriched snapshot)
         home: Team data for home team (pandas Series from enriched snapshot)
+        game_context: Optional game context with rest days and venue info
 
     Returns:
         MatchupFeatures dataclass with all comparative metrics
@@ -178,11 +182,23 @@ def calculate_matchup_features(away: pd.Series, home: pd.Series) -> MatchupFeatu
         style_clash = "similar"
 
     # =========================================================================
-    # F. Placeholder Hooks (Future Enhancement)
+    # F. Context-Dependent Features (Rest & Travel)
     # =========================================================================
     home_court_factor = calculate_home_court_factor(home)
-    rest_advantage = None  # TODO: Implement with schedule data
-    travel_distance = None  # TODO: Implement with venue database
+    
+    # Rest advantage: days rest differential (positive = home has more rest)
+    if game_context is not None and game_context.rest_advantage is not None:
+        rest_advantage = game_context.rest_advantage
+    else:
+        rest_advantage = None
+    
+    # Travel distance: miles from away team's home venue to game venue
+    if game_context is not None:
+        travel_distance = calculate_travel_distance(
+            game_context.away_venue, game_context.home_venue
+        )
+    else:
+        travel_distance = None
 
     return MatchupFeatures(
         # Efficiency deltas
@@ -342,23 +358,46 @@ class GameContext:
         return None
 
 
-def calculate_travel_distance(away_venue: str, home_venue: str) -> Optional[float]:
-    """Calculate travel distance in miles.
+def calculate_travel_distance(away_venue: Optional[str], home_venue: Optional[str]) -> Optional[float]:
+    """Calculate travel distance in miles between venues.
 
-    Placeholder: Returns None for now.
+    Uses a simple distance estimation based on venue names and states.
+    For neutral site games or missing venue data, returns None.
 
-    Future implementation should:
-    - Use geocoding API to convert venue names to coordinates
-    - Calculate great circle distance (haversine formula)
-    - Account for conference vs non-conference travel patterns
-    - Consider neutral site games
+    Future enhancement: Use geocoding API for precise coordinates and
+    haversine formula for accurate great circle distance.
 
     Args:
-        away_venue: Away team's home venue name
-        home_venue: Host venue name
+        away_venue: Away team's home venue name (e.g., "Matthew Knight Arena, Eugene, OR")
+        home_venue: Host venue name (e.g., "McCarthey Athletic Center, Spokane, WA")
 
     Returns:
-        Travel distance in miles or None
+        Estimated travel distance in miles or None if data unavailable
     """
-    # TODO: Implement with venue database and geocoding
-    return None
+    if not away_venue or not home_venue:
+        return None
+    
+    # Extract state abbreviations from venue strings (common pattern: "City, ST")
+    import re
+    
+    # Try to extract state codes (2-letter uppercase)
+    away_state_match = re.search(r',\s*([A-Z]{2})\b', away_venue)
+    home_state_match = re.search(r',\s*([A-Z]{2})\b', home_venue)
+    
+    if not away_state_match or not home_state_match:
+        # If we can't extract states, return None (would need geocoding)
+        return None
+    
+    away_state = away_state_match.group(1)
+    home_state = home_state_match.group(1)
+    
+    # If same state, estimate short distance (0-200 miles)
+    if away_state == home_state:
+        # Same state: estimate 50-200 miles (conference games often closer)
+        return 100.0  # Conservative estimate for same-state games
+    
+    # Different states: use rough distance estimates for common conference patterns
+    # This is a simplified approach - full implementation would use geocoding
+    # For now, return a placeholder that indicates travel is required
+    # Typical cross-state travel: 200-2000 miles
+    return 500.0  # Conservative estimate for cross-state travel
