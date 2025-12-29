@@ -281,7 +281,7 @@ class RefRatingsScraper:
                 'input[name="email"]',
                 'input[type="email"]',
                 'input[placeholder="E-mail"]',
-                'input#email',
+                "input#email",
                 'input[placeholder*="email" i]',
             ]
 
@@ -407,9 +407,7 @@ class RefRatingsScraper:
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 page.wait_for_timeout(500)
 
-                current_count = page.evaluate(
-                    "() => document.querySelectorAll('table tr').length"
-                )
+                current_count = page.evaluate("() => document.querySelectorAll('table tr').length")
 
                 if current_count == prev_count and scroll_attempt > 2:
                     print(f"All referees loaded ({current_count} rows)")

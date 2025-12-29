@@ -353,9 +353,23 @@ Full API documentation and JSON schemas are available in the `docs/` and `schema
 
 ## Development
 
+### Automated Validation Hooks
+
+This project uses automated hooks for quality assurance:
+- **Pre-commit hook** - Validates code before commits (format, lint, type check, tests)
+- **Post-edit hook** - Type checks after Claude edits files
+- **Session start hook** - Syncs dependencies on session start
+
+See [HOOKS.md](HOOKS.md) for complete documentation.
+
+### Manual Commands
+
 ```bash
 uv run ruff format .      # Format
 uv run ruff check .       # Lint
 pyrefly check             # Type check
 uv run pytest             # Test
+
+# Full validation (what pre-commit runs)
+powershell -ExecutionPolicy Bypass -File scripts/hooks/validate-all.ps1
 ```

@@ -1,4 +1,5 @@
 """Debug script to inspect the officials.php page structure."""
+
 import os
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
@@ -13,8 +14,12 @@ with sync_playwright() as p:
     page.wait_for_timeout(2000)
 
     # Login
-    page.fill('input[name="email"]', os.getenv("KENPOM_EMAIL"))
-    page.fill('input[name="password"]', os.getenv("KENPOM_PASSWORD"))
+    email = os.getenv("KENPOM_EMAIL")
+    password = os.getenv("KENPOM_PASSWORD")
+    if not email or not password:
+        raise ValueError("KENPOM_EMAIL and KENPOM_PASSWORD must be set")
+    page.fill('input[name="email"]', email)
+    page.fill('input[name="password"]', password)
     page.click('input[type="submit"]')
     page.wait_for_timeout(3000)
 

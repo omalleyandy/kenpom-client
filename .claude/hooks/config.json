@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "PostToolUse:Edit": {
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".claude/hooks/post-edit.ps1",
+        "-EditedFile",
+        "${file}",
+        "-SessionId",
+        "${session_id}",
+        "-Cwd",
+        "${cwd}"
+      ],
+      "description": "Run full type checking after file edits",
+      "enabled": true,
+      "blocking": false
+    },
+    "SessionStart": {
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".claude/hooks/session-start.ps1",
+        "-SessionId",
+        "${session_id}",
+        "-Cwd",
+        "${cwd}"
+      ],
+      "description": "Sync dependencies and check for updates on session start",
+      "enabled": true,
+      "blocking": false
+    }
+  }
+}

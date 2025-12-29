@@ -185,13 +185,13 @@ def calculate_matchup_features(
     # F. Context-Dependent Features (Rest & Travel)
     # =========================================================================
     home_court_factor = calculate_home_court_factor(home)
-    
+
     # Rest advantage: days rest differential (positive = home has more rest)
     if game_context is not None and game_context.rest_advantage is not None:
         rest_advantage = game_context.rest_advantage
     else:
         rest_advantage = None
-    
+
     # Travel distance: miles from away team's home venue to game venue
     if game_context is not None:
         travel_distance = calculate_travel_distance(
@@ -358,7 +358,9 @@ class GameContext:
         return None
 
 
-def calculate_travel_distance(away_venue: Optional[str], home_venue: Optional[str]) -> Optional[float]:
+def calculate_travel_distance(
+    away_venue: Optional[str], home_venue: Optional[str]
+) -> Optional[float]:
     """Calculate travel distance in miles between venues.
 
     Uses a simple distance estimation based on venue names and states.
@@ -376,26 +378,26 @@ def calculate_travel_distance(away_venue: Optional[str], home_venue: Optional[st
     """
     if not away_venue or not home_venue:
         return None
-    
+
     # Extract state abbreviations from venue strings (common pattern: "City, ST")
     import re
-    
+
     # Try to extract state codes (2-letter uppercase)
-    away_state_match = re.search(r',\s*([A-Z]{2})\b', away_venue)
-    home_state_match = re.search(r',\s*([A-Z]{2})\b', home_venue)
-    
+    away_state_match = re.search(r",\s*([A-Z]{2})\b", away_venue)
+    home_state_match = re.search(r",\s*([A-Z]{2})\b", home_venue)
+
     if not away_state_match or not home_state_match:
         # If we can't extract states, return None (would need geocoding)
         return None
-    
+
     away_state = away_state_match.group(1)
     home_state = home_state_match.group(1)
-    
+
     # If same state, estimate short distance (0-200 miles)
     if away_state == home_state:
         # Same state: estimate 50-200 miles (conference games often closer)
         return 100.0  # Conservative estimate for same-state games
-    
+
     # Different states: use rough distance estimates for common conference patterns
     # This is a simplified approach - full implementation would use geocoding
     # For now, return a placeholder that indicates travel is required

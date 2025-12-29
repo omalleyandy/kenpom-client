@@ -108,23 +108,31 @@ class DailyOfficialsSnapshot:
         """Convert to pandas DataFrame."""
         rows = []
         for g in self.games:
-            rows.append({
-                "game_id": g.game_id,
-                "home_team": g.home_team,
-                "away_team": g.away_team,
-                "home_team_kenpom": g.home_team_kenpom,
-                "away_team_kenpom": g.away_team_kenpom,
-                "game_time": g.game_time,
-                "officials": ", ".join(g.officials) if g.officials else "",
-                "officials_posted": g.officials_posted,
-                "crew_faa": g.crew_faa,
-                "ref_1": g.officials[0] if len(g.officials) > 0 else None,
-                "ref_2": g.officials[1] if len(g.officials) > 1 else None,
-                "ref_3": g.officials[2] if len(g.officials) > 2 else None,
-                "ref_1_faa": g.individual_faa.get(g.officials[0]) if len(g.officials) > 0 else None,
-                "ref_2_faa": g.individual_faa.get(g.officials[1]) if len(g.officials) > 1 else None,
-                "ref_3_faa": g.individual_faa.get(g.officials[2]) if len(g.officials) > 2 else None,
-            })
+            rows.append(
+                {
+                    "game_id": g.game_id,
+                    "home_team": g.home_team,
+                    "away_team": g.away_team,
+                    "home_team_kenpom": g.home_team_kenpom,
+                    "away_team_kenpom": g.away_team_kenpom,
+                    "game_time": g.game_time,
+                    "officials": ", ".join(g.officials) if g.officials else "",
+                    "officials_posted": g.officials_posted,
+                    "crew_faa": g.crew_faa,
+                    "ref_1": g.officials[0] if len(g.officials) > 0 else None,
+                    "ref_2": g.officials[1] if len(g.officials) > 1 else None,
+                    "ref_3": g.officials[2] if len(g.officials) > 2 else None,
+                    "ref_1_faa": g.individual_faa.get(g.officials[0])
+                    if len(g.officials) > 0
+                    else None,
+                    "ref_2_faa": g.individual_faa.get(g.officials[1])
+                    if len(g.officials) > 1
+                    else None,
+                    "ref_3_faa": g.individual_faa.get(g.officials[2])
+                    if len(g.officials) > 2
+                    else None,
+                }
+            )
         return pd.DataFrame(rows)
 
     def to_json(self) -> str:
@@ -440,7 +448,7 @@ class ESPNOfficialsScraper:
                 print(f"\nChecking {len(game_ids)} games for officials...")
 
                 for i, game_id in enumerate(game_ids):
-                    print(f"  [{i+1}/{len(game_ids)}] Game {game_id}...", end=" ")
+                    print(f"  [{i + 1}/{len(game_ids)}] Game {game_id}...", end=" ")
 
                     try:
                         officials, home, away, game_time = self.scrape_game_officials(page, game_id)
@@ -467,33 +475,37 @@ class ESPNOfficialsScraper:
                             without_officials += 1
                             print("✗ Officials not yet posted")
 
-                        games.append(GameOfficials(
-                            game_id=game_id,
-                            home_team=home,
-                            away_team=away,
-                            home_team_kenpom=home_kenpom,
-                            away_team_kenpom=away_kenpom,
-                            game_time=game_time,
-                            officials=officials,
-                            officials_posted=officials_posted,
-                            crew_faa=crew_faa,
-                            individual_faa=individual_faa,
-                        ))
+                        games.append(
+                            GameOfficials(
+                                game_id=game_id,
+                                home_team=home,
+                                away_team=away,
+                                home_team_kenpom=home_kenpom,
+                                away_team_kenpom=away_kenpom,
+                                game_time=game_time,
+                                officials=officials,
+                                officials_posted=officials_posted,
+                                crew_faa=crew_faa,
+                                individual_faa=individual_faa,
+                            )
+                        )
 
                     except Exception as e:
                         print(f"ERROR: {e}")
-                        games.append(GameOfficials(
-                            game_id=game_id,
-                            home_team="",
-                            away_team="",
-                            home_team_kenpom=None,
-                            away_team_kenpom=None,
-                            game_time=None,
-                            officials=[],
-                            officials_posted=False,
-                            crew_faa=None,
-                            individual_faa={},
-                        ))
+                        games.append(
+                            GameOfficials(
+                                game_id=game_id,
+                                home_team="",
+                                away_team="",
+                                home_team_kenpom=None,
+                                away_team_kenpom=None,
+                                game_time=None,
+                                officials=[],
+                                officials_posted=False,
+                                crew_faa=None,
+                                individual_faa={},
+                            )
+                        )
                         without_officials += 1
 
                     # Small delay between requests
@@ -579,7 +591,7 @@ def main():
             # Sort by absolute FAA for interesting matchups
             games_with_faa.sort(key=lambda g: abs(g.crew_faa or 0), reverse=True)
             for g in games_with_faa[:10]:
-                faa_sign = "+" if g.crew_faa >= 0 else ""
+                faa_sign = "+" if (g.crew_faa or 0) >= 0 else ""
                 print(f"  {g.away_team} @ {g.home_team}")
                 print(f"    Crew: {', '.join(g.officials)}")
                 print(f"    Combined FAA: {faa_sign}{g.crew_faa:.2f}")

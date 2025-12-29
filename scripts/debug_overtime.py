@@ -17,10 +17,12 @@ def main():
         print("Logging in...")
         page.goto("https://overtime.ag/sports#/", wait_until="networkidle")
         page.wait_for_timeout(2000)
-        page.locator('input[placeholder*="Customer"]').first.fill(
-            os.getenv("OV_CUSTOMER_ID")
-        )
-        page.locator('input[type="password"]').first.fill(os.getenv("OV_PASSWORD"))
+        customer_id = os.getenv("OV_CUSTOMER_ID")
+        password = os.getenv("OV_PASSWORD")
+        if not customer_id or not password:
+            raise ValueError("OV_CUSTOMER_ID and OV_PASSWORD must be set")
+        page.locator('input[placeholder*="Customer"]').first.fill(customer_id)
+        page.locator('input[type="password"]').first.fill(password)
         page.locator('button:has-text("Login")').first.click()
         page.wait_for_timeout(4000)
 

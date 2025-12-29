@@ -41,6 +41,7 @@ class GameOdds:
     game_time: Optional[str]  # Game start time
     sport: str = "NCAAB"  # NCAA Men's Basketball
 
+
 def _parse_spread(value: str | float | None) -> float | None:
     """Parse spread value, handling PK (pick'em) as 0."""
     if value is None:
@@ -563,11 +564,16 @@ class OvertimeScraper:
             # Convert to GameOdds objects
             for game in game_data:
                 try:
+                    spread = _parse_spread(game["spread"])
+                    spread_price = int(game["spread_price"]) if game["spread_price"] else None
                     odds = GameOdds(
                         away_team=game["away_team"],
                         home_team=game["home_team"],
-                        market_spread=_parse_spread(game["spread"]),
-                        spread_odds=int(game["spread_price"]) if game["spread_price"] else None,
+                        # Market spread is typically home team spread (negative for favorites)
+                        home_spread=spread,
+                        away_spread=-spread if spread is not None else None,
+                        home_spread_odds=spread_price,
+                        away_spread_odds=spread_price,
                         home_ml=int(game["home_ml"]) if game["home_ml"] else None,
                         away_ml=int(game["away_ml"]) if game["away_ml"] else None,
                         total=float(game["total"]) if game["total"] else None,

@@ -116,9 +116,7 @@ def print_analysis(edges: list[GameEdge]):
 
     print("SPREAD EDGE ANALYSIS (sorted by edge size)")
     print("-" * 80)
-    print(
-        f"{'Matchup':<35} {'ESPN':>8} {'KenPom':>8} {'Edge':>8} {'Play':<20}"
-    )
+    print(f"{'Matchup':<35} {'ESPN':>8} {'KenPom':>8} {'Edge':>8} {'Play':<20}")
     print("-" * 80)
 
     for g in spread_plays:
@@ -135,9 +133,7 @@ def print_analysis(edges: list[GameEdge]):
     print()
     print("TOTAL EDGE ANALYSIS (sorted by edge size)")
     print("-" * 80)
-    print(
-        f"{'Matchup':<35} {'ESPN':>8} {'KenPom':>8} {'Edge':>8} {'Play':<20}"
-    )
+    print(f"{'Matchup':<35} {'ESPN':>8} {'KenPom':>8} {'Edge':>8} {'Play':<20}")
     print("-" * 80)
 
     total_plays = sorted(edges, key=lambda x: abs(x.total_edge), reverse=True)

@@ -32,6 +32,7 @@ from mcp.types import TextContent, Tool
 from .client import KenPomClient
 from .config import Settings
 from .effort import EffortLevel, classify_effort
+from .models import ArchiveRating, Rating
 from .prediction import DEFAULT_HOME_COURT_ADVANTAGE, DEFAULT_SIGMOID_K, project_scores
 from .slate import DEFAULT_HOME_ADV, DEFAULT_K, fanmatch_slate_table, join_with_odds
 
@@ -777,7 +778,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 data = client.ratings(y=season)
 
             # Find teams (case-insensitive partial match)
-            def find_rating(name: str):
+            def find_rating(name: str) -> ArchiveRating | Rating | None:
                 name_lower = name.lower()
                 for r in data:
                     if name_lower in r.TeamName.lower():
@@ -850,8 +851,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 ]
 
                 # Column subset for display
-                display_cols = ["visitor", "home", "proj_margin", "proj_total",
-                                "win_prob_home", "feature_source_home"]
+                display_cols = [
+                    "visitor",
+                    "home",
+                    "proj_margin",
+                    "proj_total",
+                    "win_prob_home",
+                    "feature_source_home",
+                ]
                 if do_join_odds and "odds_spread" in df.columns:
                     display_cols.extend(["odds_spread", "spread_edge"])
 
@@ -878,9 +885,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                     edges = df["spread_edge"].dropna()
                     if len(edges) > 0:
                         lines.append("")
-                        lines.append(f"Avg Edge: {edges.mean():+.1f} | "
-                                     f"Max Edge: {edges.max():+.1f} | "
-                                     f"Odds Joined: {df['odds_joined'].sum()}/{len(df)}")
+                        lines.append(
+                            f"Avg Edge: {edges.mean():+.1f} | "
+                            f"Max Edge: {edges.max():+.1f} | "
+                            f"Odds Joined: {df['odds_joined'].sum()}/{len(df)}"
+                        )
 
                 result = "\n".join(lines)
 

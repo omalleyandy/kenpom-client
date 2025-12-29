@@ -520,7 +520,9 @@ def main():
         spread_odds = row.get(spread_odds_col, -110)
 
         if pd.isna(market_spread) or pd.isna(spread_odds):
-            print(f"  Skipping {row['away_team']} @ {row['home_team']}: spread={market_spread}, odds={spread_odds}")
+            print(
+                f"  Skipping {row['away_team']} @ {row['home_team']}: spread={market_spread}, odds={spread_odds}"
+            )
             continue
 
         analysis = analyze_spread_edge(

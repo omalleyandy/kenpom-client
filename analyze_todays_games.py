@@ -749,8 +749,8 @@ def main():
     print(f"Date: {date_str}")
     print("=" * 80)
 
-    analyses = []
-    unmatched_teams = []
+    analyses: list[dict[str, float | str | None]] = []
+    unmatched_teams: list[str] = []
     for away, home in games:
         market_odds = get_market_odds(odds_df, away, home)
         fanmatch_pred = find_fanmatch_game(fanmatch_data, away, home)
@@ -759,10 +759,11 @@ def main():
         print(format_game_analysis(analysis))
 
         # Track unmatched teams
-        if "error" in analysis and "Team not found" in analysis.get("error", ""):
-            error_msg = analysis["error"]
-            missing_team = error_msg.replace("Team not found:", "").strip()
-            unmatched_teams.append(missing_team)
+        if "error" in analysis:
+            error_msg = analysis.get("error", "")
+            if isinstance(error_msg, str) and "Team not found" in error_msg:
+                missing_team = error_msg.replace("Team not found:", "").strip()
+                unmatched_teams.append(missing_team)
 
     # Validate team matching
     valid_analyses = [a for a in analyses if "error" not in a]

@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import pandas as pd
 
@@ -209,13 +209,19 @@ def fanmatch_slate_table(
     try:
         # 1) Pull slate
         slate_raw = c.fanmatch(d=d)
-        slate = [g.model_dump() if hasattr(g, "model_dump") else g for g in slate_raw]
+        slate = cast(
+            list[dict[str, Any]],
+            [g.model_dump() if hasattr(g, "model_dump") else g for g in slate_raw],
+        )
 
         if not slate:
             return pd.DataFrame()
 
         # 2) Determine season from slate
-        season = int(slate[0].get("Season"))
+        season_val = slate[0].get("Season")
+        if season_val is None:
+            raise ValueError("Season field missing from fanmatch data")
+        season = int(season_val)
 
         # 3) Build TeamName -> TeamID map
         teams_raw = c.teams(y=season)
@@ -224,7 +230,7 @@ def fanmatch_slate_table(
 
         name_to_id: Dict[str, int] = {}
         for t in teams_raw:
-            tm = t.model_dump() if hasattr(t, "model_dump") else t
+            tm = cast(dict[str, Any], t.model_dump() if hasattr(t, "model_dump") else t)
             nm = tm.get("TeamName")
             tid = tm.get("TeamID")
             if isinstance(nm, str) and isinstance(tid, int):
@@ -297,8 +303,16 @@ def fanmatch_slate_table(
                     "error": "TeamID mapping failed",
                 }
                 if include_raw_fanmatch:
-                    for kk in ["GameID", "HomeRank", "VisitorRank", "PredTempo",
-                               "ThrillScore", "HomePred", "VisitorPred", "HomeWP"]:
+                    for kk in [
+                        "GameID",
+                        "HomeRank",
+                        "VisitorRank",
+                        "PredTempo",
+                        "ThrillScore",
+                        "HomePred",
+                        "VisitorPred",
+                        "HomeWP",
+                    ]:
                         if kk in g:
                             row[f"fanmatch_{kk}"] = g[kk]
                 rows.append(row)
@@ -418,8 +432,16 @@ def fanmatch_slate_table(
                 row["warnings"] = ";".join(warnings)
 
             if include_raw_fanmatch:
-                for kk in ["GameID", "HomeRank", "VisitorRank", "PredTempo",
-                           "ThrillScore", "HomePred", "VisitorPred", "HomeWP"]:
+                for kk in [
+                    "GameID",
+                    "HomeRank",
+                    "VisitorRank",
+                    "PredTempo",
+                    "ThrillScore",
+                    "HomePred",
+                    "VisitorPred",
+                    "HomeWP",
+                ]:
                     if kk in g:
                         row[f"fanmatch_{kk}"] = g[kk]
 
@@ -481,8 +503,20 @@ def join_with_odds(
 
     # Merge on normalized names
     merged = slate_df.merge(
-        odds_df[["home_norm", "away_norm", "home_spread", "home_spread_odds",
-                 "home_ml", "away_ml", "total", "over_odds", "under_odds", "game_time"]],
+        odds_df[
+            [
+                "home_norm",
+                "away_norm",
+                "home_spread",
+                "home_spread_odds",
+                "home_ml",
+                "away_ml",
+                "total",
+                "over_odds",
+                "under_odds",
+                "game_time",
+            ]
+        ],
         left_on=["home_norm", "visitor_norm"],
         right_on=["home_norm", "away_norm"],
         how="left",
@@ -490,13 +524,15 @@ def join_with_odds(
     )
 
     # Rename odds columns for clarity
-    merged = merged.rename(columns={
-        "home_spread": "odds_spread",
-        "home_spread_odds": "odds_spread_odds",
-        "total": "odds_total",
-        "home_ml": "odds_home_ml",
-        "away_ml": "odds_away_ml",
-    })
+    merged = merged.rename(
+        columns={
+            "home_spread": "odds_spread",
+            "home_spread_odds": "odds_spread_odds",
+            "total": "odds_total",
+            "home_ml": "odds_home_ml",
+            "away_ml": "odds_away_ml",
+        }
+    )
 
     # Mark which rows got odds
     merged["odds_joined"] = merged["odds_spread"].notna()
@@ -545,8 +581,7 @@ def validate_backtest(slate_df: pd.DataFrame, as_of_date: str) -> List[str]:
         fallback_rows = slate_df[slate_df["warnings"].notna()]
         if len(fallback_rows) > 0:
             warnings.append(
-                f"FALLBACK: {len(fallback_rows)} games fell back to ratings "
-                f"(archive unavailable)"
+                f"FALLBACK: {len(fallback_rows)} games fell back to ratings (archive unavailable)"
             )
 
     # Check method column

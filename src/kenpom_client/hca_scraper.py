@@ -348,7 +348,7 @@ class HCAScraper:
                 'input[name="email"]',
                 'input[type="email"]',
                 'input[placeholder="E-mail"]',
-                'input#email',
+                "input#email",
                 'input[placeholder*="email" i]',
             ]
 
@@ -410,7 +410,9 @@ class HCAScraper:
 
                     # Try navigating to main page
                     try:
-                        page.goto("https://kenpom.com/", wait_until="domcontentloaded", timeout=60000)
+                        page.goto(
+                            "https://kenpom.com/", wait_until="domcontentloaded", timeout=60000
+                        )
                         page.wait_for_timeout(2000)
                         if page.locator("a:has-text('Logout')").is_visible(timeout=3000):
                             print("Login verified!")
@@ -505,6 +507,7 @@ class HCAScraper:
         except Exception as e:
             print(f"Login failed: {e}")
             import traceback
+
             traceback.print_exc()
             return False
 
