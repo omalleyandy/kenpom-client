@@ -550,12 +550,11 @@ def join_with_odds(
     return merged
 
 
-def validate_backtest(slate_df: pd.DataFrame, as_of_date: str) -> List[str]:
+def validate_backtest(slate_df: pd.DataFrame) -> List[str]:
     """Validate that slate uses only time-correct (non-lookahead) features.
 
     Args:
         slate_df: DataFrame from fanmatch_slate_table
-        as_of_date: The date we're simulating predictions for
 
     Returns:
         List of validation warnings (empty = valid for backtesting)

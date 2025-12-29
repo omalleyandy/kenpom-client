@@ -278,7 +278,7 @@ def main() -> None:
 
             # Validate backtest mode if enabled
             if use_archive:
-                warnings = validate_backtest(df, args.date)
+                warnings = validate_backtest(df)
                 if warnings:
                     print("BACKTEST VALIDATION WARNINGS:")
                     for w in warnings:

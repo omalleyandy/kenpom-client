@@ -21,11 +21,7 @@ class TestCalculateSigma:
     def test_baseline_values(self):
         """Test sigma with median NCAA values."""
         sigma = _calculate_sigma(
-            off_ft=20.0,
-            off_fg2=50.0,
             off_fg3=30.0,
-            def_ft=20.0,
-            def_fg2=50.0,
             def_fg3=30.0,
             tempo=68.0,
         )
@@ -35,21 +31,13 @@ class TestCalculateSigma:
     def test_high_tempo_increases_sigma(self):
         """High tempo should increase variance."""
         sigma_normal = _calculate_sigma(
-            off_ft=20.0,
-            off_fg2=50.0,
             off_fg3=30.0,
-            def_ft=20.0,
-            def_fg2=50.0,
             def_fg3=30.0,
             tempo=68.0,
         )
 
         sigma_high = _calculate_sigma(
-            off_ft=20.0,
-            off_fg2=50.0,
             off_fg3=30.0,
-            def_ft=20.0,
-            def_fg2=50.0,
             def_fg3=30.0,
             tempo=75.0,  # High tempo
         )
@@ -59,21 +47,13 @@ class TestCalculateSigma:
     def test_high_3pt_rate_increases_sigma(self):
         """High 3PT rate should increase variance."""
         sigma_normal = _calculate_sigma(
-            off_ft=20.0,
-            off_fg2=50.0,
             off_fg3=30.0,
-            def_ft=20.0,
-            def_fg2=50.0,
             def_fg3=30.0,
             tempo=68.0,
         )
 
         sigma_high_3pt = _calculate_sigma(
-            off_ft=15.0,
-            off_fg2=45.0,
             off_fg3=40.0,  # High 3PT rate
-            def_ft=15.0,
-            def_fg2=45.0,
             def_fg3=40.0,  # High 3PT rate
             tempo=68.0,
         )
@@ -84,11 +64,7 @@ class TestCalculateSigma:
         """Sigma should be clamped to [9.5, 13.0]."""
         # Try extreme values that would produce very high sigma
         sigma_extreme = _calculate_sigma(
-            off_ft=10.0,
-            off_fg2=40.0,
             off_fg3=50.0,  # Extreme 3PT
-            def_ft=10.0,
-            def_fg2=40.0,
             def_fg3=50.0,
             tempo=80.0,  # Extreme tempo
         )

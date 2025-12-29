@@ -64,25 +64,17 @@ class EnrichedTeamSnapshot(TeamSnapshot):
 
 
 def _calculate_sigma(
-    off_ft: float,
-    off_fg2: float,
     off_fg3: float,
-    def_ft: float,
-    def_fg2: float,
     def_fg3: float,
     tempo: float,
 ) -> float:
-    """Calculate sigma (scoring margin std dev) from point distribution and tempo.
+    """Calculate sigma (scoring margin std dev) from 3PT rate and tempo.
 
-    Theory: Game variance comes from shot-making randomness across point values
-    (FT=1, 2PT=2, 3PT=3). Higher tempo and more 3PT attempts increase variance.
+    Theory: Game variance primarily driven by 3-point shooting variance
+    and tempo (more possessions = more variance).
 
     Args:
-        off_ft: Offensive % of points from free throws
-        off_fg2: Offensive % of points from 2-pointers
         off_fg3: Offensive % of points from 3-pointers
-        def_ft: Defensive % of points from free throws allowed
-        def_fg2: Defensive % of points from 2-pointers allowed
         def_fg3: Defensive % of points from 3-pointers allowed
         tempo: Adjusted tempo (possessions per game)
 
@@ -191,11 +183,7 @@ def _merge_enrichment_data(
         sigma_val = None
         if include_sigma and pd:
             sigma_val = _calculate_sigma(
-                pd.OffFt,
-                pd.OffFg2,
                 pd.OffFg3,
-                pd.DefFt,
-                pd.DefFg2,
                 pd.DefFg3,
                 tempo,
             )
